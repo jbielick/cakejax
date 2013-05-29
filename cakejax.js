@@ -1,6 +1,5 @@
 /**==============================================
-*	cakeJAX v0.4.4 BETA
-*	4/22/013
+*	CakeJax v0.5.3 BETA
 *	 
 *	 ___ ___    _   ___ __  __ ___ _  _ _____
 *	| __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -12,22 +11,18 @@
 *	
 *==============================================*/
 
-var cj = (function()
-{
-	var cj = {
-		data: {},
-		listeners: {},
-		removeAfter: {},
-		validates: {},
-		callbacks: {},
-		debug: false
-	}
-	
-	cj.init = function()
-	{
+
+var cj = {
+	data: {},
+	listeners: {},
+	removeAfter: {},
+	validates: {},
+	callbacks: {},
+	debug: false,
+	init: function() {
 		if(cj.debug)
 			console.log('cj Initialized');
-			
+		
 		if(typeof CKEDITOR != 'undefined')
 		{
 			try{
@@ -36,19 +31,17 @@ var cj = (function()
 				//don't care
 			}
 		}
-		
+	
 		cj._binds()
 		cj._formInit()
-		
+	
 		if(typeof arguments[arguments.length-1] == 'function')
 			arguments[arguments.length-1].call(this);
-	}
-	cj.collect = function($form)
-	{
-		$form = (typeof $form != 'undefined') ? $form : $('form');
-		
+	},
+	collect: function($form) {
 		$form.each(function(i) {
 			var $el = $(this)
+			
 			if(cj.debug)
 				console.log('collecting '+$el[0].id)
 
@@ -152,35 +145,35 @@ var cj = (function()
 			cj.data[fdata.formId] = fdata;
 
 			if(fdata.live) {
-				cj.save({ formId: fdata.formId })
+				cj.save({ form: $($form) })
 			}
 		})
-	}
-	cj.save = function(ops)
-	{
-		cj.flash({msg: 'Saving...',autoRemove: false,addClass: 'save'});
-		
-		var defs = { formId: false }, data = {}, refresh
-		
-		var defs = {formId: false,},requests = {},refresh
+	},
+	save: function(ops) {
+		var defs = { form: false }, data = {}, refresh
+
 		defs = $.extend({}, defs, ops)
-		if(defs.formId) {
-			data[defs.formId] = cj.data[defs.formId];
-			delete cj.data[defs.formId];
+	
+		if(defs.form) {
+			var formId = $(defs.form).attr('id')
+			data[formId] = cj.data[formId]
 		}
 		else
 			data = cj.data;
 
 		if(objectSize(data) > 0) {
+		
+			cj.flash({msg: 'Saving...',autoRemove: false,addClass: 'save'});
+		
 			if(cj.debug)
 				console.log(data)//JSON.stringify(data, null, '\t'));
-				
+			
 			for (var formId in data)
 			{
 				if( data.hasOwnProperty(formId) )
 				{
 					var req = data[formId];
-					
+				
 					cj.setButton({status:'duringsave', disabled: true, scope: $('#'+formId)});
 
 					if(!req.files || req.files && req.files.length == 0)
@@ -200,6 +193,7 @@ var cj = (function()
 									}
 									if(success && req.refresh)
 										cj.refresh();
+									cj._callback('afterSave', $form, success)
 								});
 								if(typeof arguments[arguments.length-1] == 'function')
 									arguments[arguments.length-1].call(this, response, success);
@@ -228,8 +222,8 @@ var cj = (function()
 					}
 					else if(req.files && req.files.length > 0)
 					{
-//						var originData = (typeof req._origin != 'undefined') ? req._origin : {};
-//						req.files.data = $('#'+formId).serializeArray();
+	//					var originData = (typeof req._origin != 'undefined') ? req._origin : {};
+	//					req.files.data = $('#'+formId).serializeArray();
 						cj.uploadFiles(req, req.refresh);
 					}
 					delete cj.data[formId];
@@ -238,55 +232,51 @@ var cj = (function()
 		}
 		else
 			cj.flash('No changes to save!')
-	}
-	cj._validate = function(ops) {
-		// for(var form in request)
-		// 		if(request in cj.validates) {
-		// 			for(var vtype in cj.validates[request]) {
-		// 				if(validates.hasOwnProperty(vtype)) {
-		// 					if(vtype == 'notempty') {
-		// 						for(var input in validates[request][vtype]) {
-		// 							if($(input).val() == '')
-		// 							{
-		// 								cj.flash('The field '+input.match(/\[[A-Za-z0-9]+\]$/i)[0]+' is required');
-		// 								$(input).focus();
-		// 								return false;
-		// 							}
-		// 						}
-		// 					}
-		// 				}
-		// 			}
-		// 		}
-		// 		else
-		// 			return true;
-	}
-	cj.callback = function(method, $form) {
-		for(key in cj.callbacks) {
-			if(cj.callbacks.hasOwnProperty(key)) {
-				if($form.is(key) && ( method in cj.callbacks[key] ) && typeof cj.callbacks[key][method] == 'function' ) {
-					return cj.callbacks[key][method].call(this, $form);
-				} else
-					return true
-			}
-		}
-	}
-	cj.del = function(params) 
-	{
-		var prettyController = (typeof params.item != 'undefined') ? params.item : 'item',
-			refresh = (typeof params.refresh == 'undefined') ? true : params.refresh
-			
+	},
+	_validate: function(ops) {
+	// for(var form in request)
+	// 		if(request in cj.validates) {
+	// 			for(var vtype in cj.validates[request]) {
+	// 				if(validates.hasOwnProperty(vtype)) {
+	// 					if(vtype == 'notempty') {
+	// 						for(var input in validates[request][vtype]) {
+	// 							if($(input).val() == '')
+	// 							{
+	// 								cj.flash('The field '+input.match(/\[[A-Za-z0-9]+\]$/i)[0]+' is required');
+	// 								$(input).focus();
+	// 								return false;
+	// 							}
+	// 						}
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+	// 		else
+	// 			return true;
+	},
+	_callback: function(method, $form) {
+		var $form = $form || null
+		for(var selector in cj.callbacks)
+			if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
+				return cj.callbacks[selector][method].call(this, $form)
+		return true
+	},
+	del: function(params) {
+		var prettyController = params.item || 'item',
+			refresh = params.refresh || false;
+		
 		if(cj.debug)
 			console.log('Deleting: ', params)
-			
+		
 		if(confirm("Are you sure you want to delete this "+prettyController+"?")) {
 			var $deletable = $(params.caller).parents('.deletable').eq(0)
 			$deletable.fadeOut(function(){$(this).remove()})
-			
+		
 			if(typeof params.controller != 'undefined' && typeof params.id != 'undefined')
 			{
 				var prefix = (typeof params.prefix != 'undefined') ? '/'+params.prefix : '';
 				var url = prefix+'/'+params.controller+'/delete/'+params.id;
-				
+			
 				$.ajax({
 					url: url,
 					type: 'DELETE',
@@ -304,9 +294,8 @@ var cj = (function()
 				});
 			}
 		}
-	}
-	cj._formInit = function(form)
-	{
+	},
+	_formInit: function(form) {
 		$(document).off('change keyup input', 'input, textarea, select, radio, checkbox')
 		if(typeof CKEDITOR != 'undefined' && CKEDITOR.instances )
 		{
@@ -323,43 +312,44 @@ var cj = (function()
 					}, 300);
 				}
 		}
-		
+	
 		if(!cj.timers)
 			cj.timers = {};
-		
+	
 		var $forms = $('form.cj')
-		
+	
 		$forms.each(function(index)
 		{
 			if(cj.debug)
 				console.log('Initing Form \n \t (Checking Listen: '+$(this).data('listening')+')');
-				
+			
 			if(typeof $(this).data('cj-listening') == 'undefined' || $(this).data('cj-listening') == false)
 			{
 				if(cj.debug)
 					console.log('\t\tNow Listening To: '+$(this).attr('id'));
-					
+				
 				var $el = $(this);
-				$el.data('cj-listening', true)
-				.on('submit', function(e)
-				{
-					e.preventDefault();
-					var trigger = $(this).attr('data-cj-trigger'),
-						$form = $(this);
+					$el.data('cj-listening', true)
+					.on('submit', function(e)
+					{
+						var trigger = $(this).data('cj-trigger'),
+							$form = $(this);
+						
+						window.prompted = true
 
-					if(!cj.callback('beforeSave', $form))
+					if(!cj._callback('beforeSave', $form))
 						return false
 
 					cj.collect($form);
 					if($form.hasClass('temporary')) {
-						cj.save({refresh: true});
+						cj.save({form: $el, refresh: true});
 					}
 					else
-						cj.save();
+						cj.save({form: $el});
 				});
-				
+			
 				var formId = $el.attr('id');
-				
+			
 				cj.setButton({status: 'beforechange', disabled: false, scope: $el});
 				$el.trigger('init', [$el]);
 			}
@@ -378,30 +368,28 @@ var cj = (function()
 			}
 			cj.setButton({status: 'beforesave', disabled: false, scope: $scope});
 		});
-	};
-	cj.setButton = function(options)
-	{
+	},
+	setButton: function(options) {
 		var defs = {
-				status: 'beforechange',
+				status: 'beforeChange',
 				disabled: false,
-				highlight: true,
-				scope: $('form')
+				scope: $('form').first(),
+				statuses: {
+					beforeChange: {text: 'Saved',addClass: 'cj-static'},
+					duringSave: {text: 'Saving...',addClass: 'cj-saving'},
+					beforeSave: {text: 'Save Changes',addClass: 'cj-ready'},
+					afterSave: {text: 'Saved!',addClass: 'cj-saved'},
+					saveFail: {text: 'Retry Save',addClass: 'cj-failed'}
+				}
 			},
-			obj,
-			messages = {
-				beforechange: 'Saved',
-				duringsave: 'Saving...',
-				beforesave: 'Save Changes',
-				aftersave: 'Saved!',
-				savefail: 'Retry Save'
-			},
-			text
-		
-		ops = $.extend({}, defs, options)
-		
+			text,classToAdd,
+			ops = $.extend({}, defs, options)
+	
 		$('[onclick^="cj.save"], [type="submit"]', defs.scope).each(function() {
-			if(!$(this).attr('data-cj-nochange')) {
-				text = ($(this).attr('data-cj-'+ops.status)) ? $(this).attr('data-cj-'+ops.status) : messages[ops.status]
+			if(!$(this).data('cj-nochange')) {
+				ops.statuses = $.extend({}, ops.statuses, $(this).data('cj-statuses'))
+				text = ops.statuses[ops.status].text
+				classToAdd = ops.statuses[ops.status].addClass
 				el = $(this)[0]
 				if(defs.highlight) $(el).addClass('tosave')
 				else $(el).removeClass('tosave')
@@ -410,34 +398,39 @@ var cj = (function()
 				if(el.tagName == 'BUTTON') el.disabled = ops.disabled
 			}
 		})
-	}
-	cj.refresh = function(options) {
+	},
+	refresh: function(options) {
 		var defs = {
 			selector: '#view',
 			url: window.location.pathname
 		}
-		
+	
 		var ops = $.extend({}, defs, options)
-//		$(cj).trigger('refresh');
 		if(cj.debug)
 			console.log('refreshing', ops.selector, ops.url)
-			
+		
 		$.ajax({
 			url: ops.url,
 			type: 'GET',
 			cache: false,
 			dataType: 'text',
 			success: function(data) {
-				var $content = $(ops.selector, data).children()
-				if(cj.debug)
-					console.log($content);
-				if($content.length > 0)
-					$(ops.selector).empty().append($content)
-				cj._formInit()
+				var SCRIPT_REGEX = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,items = ops.selector.split(','), $content
+				while (SCRIPT_REGEX.test(data)) {
+				    data = data.replace(SCRIPT_REGEX, "")
+				}
+				for (var i = items.length - 1; i >= 0; i--){
+					$content = $(items[i], data).children()
+					if(cakejax.debug)
+						console.log($content);
+					if($content.length > 0)
+						$(items[i]).empty().append($content)
+				}
+				cakejax._formInit()
 			}
-			})
-	}
-	cj.resetForm = function($form) {
+		})
+	},
+	resetForm: function($form) {
 		if(cj.debug) console.log('Form Reset', $form)
 		var formId = $form[0].id, $parent = $('#'+formId).parent()
 
@@ -445,22 +438,22 @@ var cj = (function()
 		$parent.append($form)
 		cj.init()
 		cj._formInit()
-		if(typeof CKEDITOR != 'undefined'){	//reinit ckeditor on form
+		if(typeof CKEDITOR != 'undefined'){
 			try{
 				CKEDITOR.replaceAll();
 			}catch(e){
 				//don't care
 			}
 		}
-	}
-	cj.get = function(options, callback) {
+	},
+	get: function(options, callback) {
 		var ops = {
 			selector: 'form',
 			insertLoc: false,
 			addClass: ''
 		}
 		ops = $.extend({}, ops, options)
-		
+	
 		$.ajax({
 			method: 'GET',
 			url: ops.url,
@@ -473,7 +466,7 @@ var cj = (function()
 					$content.slideDown()
 				}
 				else cj.flash({msg: data, html: true, autoRemove: false, mask: true})
-				
+			
 				cj._formInit()
 
 				if(typeof arguments[arguments.length-1] == 'function')
@@ -484,108 +477,110 @@ var cj = (function()
 				cj.ajaxResponse(e)
 			}
 		})
-	}
-	cj._binds = function() {
-		cj.bind('click', '[data-cj-get]', function(e) {
-			e.preventDefault()
-			var insertLoc = $(this).attr('data-cj-insert') || false,
-				url = $(this).attr('data-cj-get'),
-				addClass = $(this).attr('data-cj-addclass') || '',
-				getonce = ($(this).attr('data-cj-getonce')) ? true : false,
-				selector = $(this).attr('data-cj-selector') || 'form'
-			
-			if(!$(this).hasClass('got') || !getonce) {
-				cj.get({
-					url: url,
-					addClass: addClass,
-					insertLoc: insertLoc,
-					selector:selector
-				})
-			}
-			if(getonce) $(this).addClass('got');
-		})
-		cj.bind('click', '.modal-close, #mask', function(e) {
-			cj.close()
-		})
-		$(document).on('keyup', function(e) {
-			if(e.keyCode == 27)
-				cj.close()
-		})
-//		.on('change', 'input[type="file"]', filePreview);
-	}
-	cj.bind = function(e, el, callback) {
-		if(!cj.listeners[e+el]) {
-			cj.listeners[e+el] = new Date().getTime();
-			$(document).on(e, el, function(e, a, b, c, d) {
-				callback.call(this, e, a, b, c, d);
+	},
+	_binds: function() {
+	cj.bind('click', '[data-cj-get]', function(e) {
+		e.preventDefault()
+		var defs = {
+				insertLoc: false,
+				addClass: '',
+				getOnce: '',
+				selector: 'form'
+			},
+			ops = $.extend({}, defs, $(this).data('cj-get'))
+		
+		if(!$(this).hasClass('got') || !getonce) {
+			cj.get({
+				url: url,
+				addClass: addClass,
+				insertLoc: insertLoc,
+				selector: selector
 			})
 		}
-		else return false;
+		if(getonce) $(this).addClass('got');
+	})
+	cj.bind('click', '.modal-close, #mask', function(e) {
+		cj.close()
+	})
+	$(document).on('keyup', function(e) {
+		if(e.keyCode == 27)
+			cj.close()
+	})
+//	.on('change', 'input[type="file"]', cj.util.filePreview);
+	},
+	bind: function(e, el, callback) {
+	if(!cj.listeners[e+el]) {
+		cj.listeners[e+el] = new Date().getTime();
+		$(document).on(e, el, function(e, a, b, c, d) {
+			callback.call(this, e, a, b, c, d);
+		})
 	}
-	cj.sort = function(selector, items, handle) {
-		var items = items || 'tr',
-			handle = (typeof handle == 'undefined') ? '' : handle
+	else return false;
+	},
+	sort: function(selector, items, handle) {
+	var items = items || 'tr',
+		handle = (typeof handle == 'undefined') ? '' : handle
 
-		$(selector).sortable({
-			items: items,
-			helper: fixHelper,
-			cursor: 'move',
-			handle: handle,
-			update: function(event, ui) {
-				var controller = $(this).attr('data-cj-controller')
-				if(controller) {
-					var sortableInstance = (ui.item[0].parentNode.id || ui.item[0].parentNode.className);
-					cj.data[sortableInstance] = {
-						action: '/admin/'+$(this).data('cj-controller')+'/reorder',
-						data: $(this).sortable('serialize'),
-						type: 'order'
-					}
-					cj.setButton({
-						status: 'beforesave',
-						disabled: false
-						})
+	$(selector).sortable({
+		items: items,
+		helper: cj.util.fixHelper,
+		cursor: 'move',
+		handle: handle,
+		update: function(event, ui) {
+			var controller = $(this).attr('data-cj-controller')
+			if(controller) {
+				var sortableInstance = (ui.item[0].parentNode.id || ui.item[0].parentNode.className);
+				cj.data[sortableInstance] = {
+					action: '/admin/'+$(this).data('cj-controller')+'/reorder',
+					data: $(this).sortable('serialize'),
+					type: 'order'
 				}
-				else cj.flash({msg: 'You forgot to define a \'data-cj-controller\' attribute on your sortable container!', error: true});
+				cj.setButton({
+					status: 'beforesave',
+					disabled: false
+					})
 			}
-		}).disableSelection();
-	};
-	cj.uploadFiles = function(req, refresh)
+			else cj.flash({msg: 'You forgot to define a \'data-cj-controller\' attribute on your sortable container!', error: true});
+		}
+	}).disableSelection();
+	},
+	uploadFiles: function(req, refresh)
 	{
-		// $el.ajaxStart(function(){
-		// 	//
-		// })
-		// .ajaxComplete(function(){
-		// 	//
-		// });
-		var nocache = new Date().getTime();
-		
-		cj.ajaxFile.upload({
-			url: req.action+'?_='+nocache,
-			secureuri:false,
-			data: $('#'+req.formId).serializeArray(),
-			files: req.files,
-			dataType: 'text',
-			async: false,
-			complete: function (data, status)
+	// $el.ajaxStart(function(){
+	// 	//
+	// })
+	// .ajaxComplete(function(){
+	// 	//
+	// });
+	var nocache = new Date().getTime();
+	
+	cj.ajaxFile.upload({
+		url: req.action+'?_='+nocache,
+		secureuri:false,
+		data: $('#'+req.formId).serializeArray(),
+		files: req.files,
+		dataType: 'text',
+		async: false,
+		complete: function (data, status)
+		{
+			cj.ajaxResponse(data.responseText, req.formId, function(response, success)
 			{
-				cj.ajaxResponse(data.responseText, req.formId, function(response, success)
-				{
-					if(success && refresh) {
-						cj.refresh();
-						cj._formInit();
-					}
-				});
-				cj.setButton({status:'aftersave',disabled: false,highlight: false});
-			},
-			error: function (err, status, e)
-			{
-				cj.setButton({status:'savefail',disabled: false,highlight: true});
-				console.log(err, status, e);
-			}
-		});
-		return false;
-	}
-	cj.ajaxFile = {
+				if(success && refresh) {
+					cj.refresh();
+					cj._formInit();
+				}
+			});
+			cj.setButton({status:'aftersave',disabled: false,highlight: false});
+		},
+		error: function (err, status, e)
+		{
+			cj.setButton({status:'savefail',disabled: false,highlight: true});
+			console.log(err, status, e);
+		}
+	});
+	return false;
+	},
+	ajaxFile: {
 		createUploadIframe: function(id, uri) {
 			//create frame
 			var frameId = 'jUploadFrame' + id
@@ -599,7 +594,7 @@ var cj = (function()
 				}	
 			}
 			iframeHtml += ' />'
-			jQuery(iframeHtml).appendTo(document.body)
+			jQuery(iframeHtml).appendTo(d.body)
 
 			return jQuery('#' + frameId).get(0)
 		},
@@ -631,7 +626,7 @@ var cj = (function()
 			var form = cj.ajaxFile.createUploadForm(id, s.files, (typeof(s.data)=='undefined'?false:s.data))
 			var io = cj.ajaxFile.createUploadIframe(id, s.secureuri)
 			var frameId = 'jUploadFrame'+id, formId = 'jUploadForm'+id;		
-			
+		
 			if ( s.global && ! jQuery.active++ )
 			{
 				jQuery.event.trigger( "ajaxStart" );
@@ -640,7 +635,7 @@ var cj = (function()
 			if ( s.global )
 				jQuery.event.trigger("ajaxSend", [xml, s]);
 			var uploadCallback = function(isTimeout) {
-				var io = document.getElementById(frameId);
+				var io = d.getElementById(frameId);
 				try {
 					if(io.contentWindow) {
 						xml.responseText = io.contentWindow.document.body?io.contentWindow.document.body.innerHTML:null;
@@ -741,8 +736,8 @@ var cj = (function()
 		if ( s.global )
 			(s.context ? jQuery(s.context) : jQuery.event).trigger( "ajaxError", [xhr, s, e] )
 		}
-	}
-	cj.ajaxResponse = function(data, formId) {
+	},
+	ajaxResponse: function(data, formId) {
 		var theFormId = (typeof formId == 'undefined') ? false : formId,
 			response, flashMessage = undefined, success = true, stop = false
 		if(typeof data == 'object') {
@@ -763,7 +758,7 @@ var cj = (function()
 			}
 			cj.flash(flashOps)
 		}
-			
+		
 		var $notices = $('p.error, .cake-error, .notice, pre', response),
 			errors = '<pre>';
 
@@ -785,11 +780,11 @@ var cj = (function()
 			if($freshForm.length > 0)
 				cj.resetForm($freshForm.addClass('temporary'))
 		}
-		
+	
 		if(typeof arguments[arguments.length-1] == 'function')
 			arguments[arguments.length-1].call(this, response, success);
-	}	
-	cj.flash = function(options)
+	},
+	flash: function(options)
 	{
 		var modalCount = $('.flashMessageModal > div').length;
 		var defs = {
@@ -810,13 +805,15 @@ var cj = (function()
 			ops = defs;
 			ops.msg = options;
 		}
+		else return
+	
 		if(ops.replace) {
 			$('[id^="flashMessage-"].'+ops.replace).fadeOut(function(){$(this).remove()})
 		}
-		
+	
 		if(cj.debug)
 			ops.autoRemove = false;
-		
+	
 		if($('.flashMessageModal').length == 0)
 		{
 			var $modal = $('<div></div>',
@@ -829,19 +826,19 @@ var cj = (function()
 
 			$modal.append($close);
 
-			var htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</\1>', 'i');
+			var htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</[A-Z][A-Z0-9]*>', 'i');
 			if(ops.html || htmlPattern.test( ops.msg ) )
 				$modal.html(ops.msg)
 			else
 				$modal.append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>')
-			
+		
 			if(ops.addClass) {
 				$modal.addClass(ops.addClass)
 			}
-			
+		
 			$mask.css({height: document.height+'px'});
 			$('body').append($modal)
-			
+		
 			$modal.css({maxHeight: (window.innerHeight - 50)+'px'})
 
 			$modal.fadeIn('slow', function(){ $(this).addClass('open-modal'); })
@@ -866,52 +863,45 @@ var cj = (function()
 					});
 				}, ops.linger);
 		}
-	}
-	cj.close = function() 
+	},
+	close: function() 
 	{
 		$('.flashMessageModal, #mask').each(function(){
 			$(this).fadeOut('fast',function(){$(this).remove()});
 		});
-	}
-	return cj;
-})();
+	},
+	util: {
+		fixHelper: function(e, ui) {
+			var $original = ui,
+				$helper = ui.clone();
 
-function fixHelper(e, ui)
-{
-	var $original = ui,
-		$helper = ui.clone();
-	
-	$helper.height($original.height());
-	$helper.width($original.width());
-	
-	return $helper;
-}
-function filePreview(e)
-{
-	var files = e.target.files
-	
-	for (var i=0; f = files[i]; i++) 
-	{
-		if(!f.type.match('image.*'))
-			continue
-			
-		var reader = new FileReader()
-		
-		reader.onload = (function(theFile) {
-			return function(e) {
-				$(evt.target).css({
-					backgroundImage: 'url('+e.target.result+')',
-					backgroundRepeat: 'no-repeat',
-					backgroundSize: 'cover'
-				})
-				.siblings('label').text('File: '+theFile.name)
-//				var $div = $('<div class="thumb">'+theFile.name+'</div>').append('<img src="'+e.target.result+'" />');
-///				$div.insertAfter($(evt.target))
+			$helper.height($original.height());
+			$helper.width($original.width());
+
+			return $helper;
+		},
+		filePreview: function(e) {
+			var files = e.target.files
+			for (var i=0; f = files[i]; i++) {
+				if(!f.type.match('image.*'))
+					continue
+				var reader = new FileReader()
+				reader.onload = (function(theFile) {
+					return function(e) {
+						$(evt.target).css({
+							backgroundImage: 'url('+e.target.result+')',
+							backgroundRepeat: 'no-repeat',
+							backgroundSize: 'cover'
+						})
+						.siblings('label').text('File: '+theFile.name)
+		//				var $div = $('<div class="thumb">'+theFile.name+'</div>').append('<img src="'+e.target.result+'" />');
+		///				$div.insertAfter($(evt.target))
+					}
+				})(f);
+				reader.readAsDataURL(f);
 			}
-		})(f);
-		
-		reader.readAsDataURL(f);
-	};
+		}
+	}
 }
 
 if (!Array.prototype.indexOf) { 
@@ -922,11 +912,10 @@ if (!Array.prototype.indexOf) {
          return -1;
     }
 }
-
 function objectSize(obj) {
-    var size = 0, key;
-    for (key in obj) {
-        if (obj.hasOwnProperty(key)) size++;
-    }
-    return size;
+	var size = 0, key;
+for (var key in obj)
+    if (obj.hasOwnProperty(key)) 
+		size++;
+return size;
 }
