@@ -37,114 +37,110 @@ cj.prototype.init = function() {
 }
 
 cj.prototype.collect = function($form) {
-	$form.each(function(i) {
-		var $el = $(this)
+	var $el = $($form), fdata = {data: {},files: []}
 
-		if(cj.options.debug)
-			console.log('Collecting: '+$el[0].id)
+	if(cj.options.debug)
+		console.log('Collecting: '+$el[0].id)
 
-		var fdata = {data: {},files: []}
+	fdata.params = {};
+	fdata.formId = $el[0].id;
+	fdata.action = $el.attr('action');
+	fdata.refresh = ($el.data('cj-refresh')) ? true : false;
+	fdata.live = ($el.data('cj-live')) ? $el.data('cj-live') : false;
 
-		fdata.params = {};
-		fdata.formId = $el[0].id;
-		fdata.action = $el.attr('action');
-		fdata.refresh = ($el.data('cj-refresh')) ? true : false;
-		fdata.live = ($el.data('cj-live')) ? $el.data('cj-live') : false;
+	var uri = fdata.action.substr(1).split('/'),
+		inputData = ''
 
-		var uri = fdata.action.substr(1).split('/'),
-			inputData = ''
+	fdata.params.prefix = uri[0] || ''
+	fdata.params.controller = (fdata.params.prefix != '') ? uri[1] : uri[0]
+	fdata.params.action = (fdata.params.prefix != '') ? uri[2] : uri[1]
+	if(fdata.params.action == 'add')
+		if(fdata.action.match('[0-9]+'))
+			fdata.params.foreignId = fdata.action.match('[0-9]+')[0]
+	else if (fdata.params.action == 'edit') {
+		if(fdata.action.match('[0-9]+'))
+			fdata.params.id = fdata.action.match('[0-9]+')[0]
+	}
 
-		fdata.params.prefix = uri[0] || ''
-		fdata.params.controller = (fdata.params.prefix != '') ? uri[1] : uri[0]
-		fdata.params.action = (fdata.params.prefix != '') ? uri[2] : uri[1]
-		if(fdata.params.action == 'add')
-			if(fdata.action.match('[0-9]+'))
-				fdata.params.foreignId = fdata.action.match('[0-9]+')[0]
-		else if (fdata.params.action == 'edit') {
-			if(fdata.action.match('[0-9]+'))
-				fdata.params.id = fdata.action.match('[0-9]+')[0]
-		}
+	var mcReg = /([a-z_0-9]+)+/ig,
+		habtmRegCbox = /\[\]/,
+		habtmRegNo = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
+		model = '',
+		inputs = $el[0].elements,
+		relationship
 
-		var mcReg = /([a-z_0-9]+)+/ig,
-			habtmRegCbox = /\[\]/,
-			habtmRegNo = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
-			model = '',
-			inputs = $el[0].elements,
-			relationship
+	for (var i = inputs.length - 1; i >= 0; i--) {
+		if(inputs[i].name.indexOf('data') > -1) {
+			saveInfo = inputs[i].name.replace('data','').match(mcReg);
+			model = saveInfo[0],
+			field = saveInfo[1],
+			habtmField = (typeof saveInfo[2] != 'undefined') ? saveInfo[2] : undefined
 
-		for (var i = inputs.length - 1; i >= 0; i--) {
-			if(inputs[i].name.indexOf('data') > -1) {
-				saveInfo = inputs[i].name.replace('data','').match(mcReg);
-				model = saveInfo[0],
-				field = saveInfo[1],
-				habtmField = (typeof saveInfo[2] != 'undefined') ? saveInfo[2] : undefined
+			// if(cj.options.debug)
+			// 	console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
 
-				// if(cj.options.debug)
-				// 	console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
-
-				if(inputs[i].type !== 'submit' && inputs[i].type != 'file') {
-					fdata.data[model] = fdata.data[model] || {}
-					//if name attr matches format of HABTM checkbox input
-					if(habtmRegCbox.test(inputs[i].name) || model == field) {
-						relationship = 'HABTM Simple'
-						//Create the necessary structure for an empty HABTM save
-						if(!(model in fdata.data[model]))
-							 fdata.data[model][model] = ''
-						//if a checkbox is found*
-						if(inputs[i].type == 'checkbox' && inputs[i].checked
-							|| inputs[i].type == 'hidden' && inputs[i].value != '') {
-							//turn the empty string into an array*
-							if(typeof fdata.data[model][model] != 'object')
-								fdata.data[model][model] = []
-							//and add the ID of that HABTM record
-							fdata.data[model][model].push(inputs[i].value)
-						}
+			if(inputs[i].type !== 'submit' && inputs[i].type != 'file') {
+				fdata.data[model] = fdata.data[model] || {}
+				//if name attr matches format of HABTM checkbox input
+				if(habtmRegCbox.test(inputs[i].name) || model == field) {
+					relationship = 'HABTM Simple'
+					//Create the necessary structure for an empty HABTM save
+					if(!(model in fdata.data[model]))
+						 fdata.data[model][model] = ''
+					//if a checkbox is found*
+					if(inputs[i].type == 'checkbox' && inputs[i].checked
+						|| inputs[i].type == 'hidden' && inputs[i].value != '') {
+						//turn the empty string into an array*
+						if(typeof fdata.data[model][model] != 'object')
+							fdata.data[model][model] = []
+						//and add the ID of that HABTM record
+						fdata.data[model][model].push(inputs[i].value)
 					}
-					else if (habtmRegNo.test(inputs[i].name) && habtmField)  // HABTM with number indices 
-					{
-						relationship = 'HABTM Deep'
-						var habtmIndex = inputs[i].name.match(/\[[0-9]+\]/i)[0].match(/[0-9]+/)[0]
-						fdata.data[model][habtmIndex] = fdata.data[model][habtmIndex] || {}
-						fdata.data[model][habtmIndex][habtmField] = inputs[i].value
+				}
+				else if (habtmRegNo.test(inputs[i].name) && habtmField)  // HABTM with number indices 
+				{
+					relationship = 'HABTM Deep'
+					var habtmIndex = inputs[i].name.match(/\[[0-9]+\]/i)[0].match(/[0-9]+/)[0]
+					fdata.data[model][habtmIndex] = fdata.data[model][habtmIndex] || {}
+					fdata.data[model][habtmIndex][habtmField] = inputs[i].value
+				}
+				else if (!/_$/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
+				{
+					relationship = 'hasOne, hasMany, or ownProperty'
+					if(inputs[i].type == 'checkbox') {
+						//special handling for non-habtm checkboxes boolean.
+						fdata.data[model][field] = (inputs[i].checked) ? 1 : 0
 					}
-					else if (!/_$/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
-					{
-						relationship = 'hasOne, hasMany, or ownProperty'
-						if(inputs[i].type == 'checkbox') {
-							//special handling for non-habtm checkboxes boolean.
-							fdata.data[model][field] = (inputs[i].checked) ? 1 : 0
-						}
-						else if(inputs[i].tagName == 'TEXTAREA' 
-								&& typeof window.ck != 'undefined'
-								&& typeof window.ck[inputs[i].id] != 'undefined') //special handling for CKEDITOR instances
-							fdata.data[model][field] = window.ck[inputs[i].id]
-						else {
-							fdata.data[model][field] = inputs[i].value
-							if(field == 'id') {
-								fdata._origin = {}
-								fdata._origin['data['+model+'][id]'] = inputs[i].value
-							}
+					else if(inputs[i].tagName == 'TEXTAREA' 
+							&& typeof window.ck != 'undefined'
+							&& typeof window.ck[inputs[i].id] != 'undefined') //special handling for CKEDITOR instances
+						fdata.data[model][field] = window.ck[inputs[i].id]
+					else {
+						fdata.data[model][field] = inputs[i].value
+						if(field == 'id') {
+							fdata._origin = {}
+							fdata._origin['data['+model+'][id]'] = inputs[i].value
 						}
 					}
 				}
-				else if (inputs[i].type == 'file' && inputs[i].value != '') {
-					var fileMeta = {}
-					//if action is add, the id in the URI may be the file's foreign (belongsTo) entry,
-					// not the file's ID itself.
-					fdata.files.push({fileElementId: inputs[i].id});
-				}
-//				if(cj.options.debug)
-//					console.log(relationship);
 			}
+			else if (inputs[i].type == 'file' && inputs[i].value != '') {
+				var fileMeta = {}
+				//if action is add, the id in the URI may be the file's foreign (belongsTo) entry,
+				// not the file's ID itself.
+				fdata.files.push({fileElementId: inputs[i].id});
+			}
+//			if(cj.options.debug)
+//				console.log(relationship);
 		}
-		if(cj.options.debug)
-			console.log(fdata.data)//JSON.stringify(fdata.data, null, '\t'));
+	}
+	if(cj.options.debug)
+		console.log(fdata.data)//JSON.stringify(fdata.data, null, '\t'));
 
-		if(fdata.live) {
-			return cj.save({ form: $($form) })
-		}
-		return fdata
-	})
+	if(fdata.live) {
+		return cj.save({ form: $($form) })
+	}
+	return fdata
 }
 cj.prototype.save = function(ops) {
 	
@@ -159,7 +155,7 @@ cj.prototype.save = function(ops) {
 	else
 		data = cj.data;
 
-	if(objectSize(data) > 0) {
+	if(objectSize(data) > 0 && data[formId]) {
 
 		cj.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
 
@@ -188,7 +184,7 @@ cj.prototype.save = function(ops) {
 								}
 								if(success && req.refresh)
 									cj.refresh()
-								cj._callback('afterSave', $form, success)
+								cj._callback('afterSave', ops.form, success)
 							})
 						},
 						error: function(e, xhr, ms) {
@@ -317,51 +313,55 @@ cj.prototype._formInit = function(form) {
 
 	$forms.each(function(index)
 	{
-		if(cj.options.debug)
-			console.log('Initing Form \n \t (Checking Listen: '+$(this).data('listening')+')');
 
-		if(typeof $(this).data('cj') == 'undefined' || $(this).data('cj') == false)
+		if(!$(this).data('cj-data') || $(this).data('cj-data') == false)
 		{
 			if(cj.options.debug)
 				console.log('\t\tNow Listening To: '+$(this).attr('id'));
 
 			var $el = $(this), formId = $el.attr('id')
 			
-				$el.data('cj', {formId: formId || 'Form'})
+				$el.data('cj-data', {formId: formId || 'Form'})
 				.on('submit', function(e)
 				{
+					e.preventDefault()
+					
 					var trigger = $(this).data('cj-trigger'),
-						$form = $(this);
+						$form = $(this),
+						ops = {form: $form}
 
 					window.prompted = true
 
-					cj.data[fdata.formId] = cj.collect($form)
-
 					if(!cj._callback('beforeSave', $form))
 						return false
-
+					
 					if($form.hasClass('temporary'))
-						cj.save({form: $el, refresh: true});
-					else
-						cj.save({form: $el});
-			});
+						ops.refresh = true
 
-			cj.setButton({status: 'beforeChange', disabled: false, scope: $el});
+					cj.save(ops)
+			})
+
+			cj.setButton({status: 'beforeChange', disabled: false, scope: $el})
 			cj._callback('init', $el)
 		}
 	});
 	$(document).on('change keyup input', 'input, textarea, select, radio, checkbox', function(e) {
-		var $scope = $(e.target.form)
+		var $form = $(e.target.form), formId = e.target.form.id
 		if(e.type == 'input' || e.type == 'keyup') {
 			clearTimeout(cj.collectTimeout)
 			cj.collectTimeout = setTimeout(function() {
-					cj.collect($scope)
+					cj.store($form)
 				}, 400)
 		} else {
-			cj.collect($scope)
+			cj.store($form)
 		}
-		cj.setButton({status: 'beforeSave', disabled: false, scope: $scope})
+		cj.setButton({status: 'beforeSave', disabled: false, scope: $form})
 	});
+}
+cj.prototype.store = function($form, data) {
+	var data = cj.collect($form)
+	$form.data('cj-data', data)
+	cj.data[$form[0].id] = data
 }
 cj.prototype.setButton = function(options) {
 	var defs = {
@@ -376,8 +376,7 @@ cj.prototype.setButton = function(options) {
 				saveFail: {text: 'Retry Save',addClass: 'cj-failed'}
 			}
 		},
-		text,classToAdd,el
-		ops = $.extend({}, defs, options)
+		text,el,ops = $.extend({}, defs, options)
 
 	var $el = $('[onclick^="cj.save"], [type="submit"]', ops.scope)
 
@@ -408,16 +407,16 @@ cj.prototype.refresh = function(options) {
 		cache: false,
 		dataType: 'text',
 		success: function(data) {
-			var SCRIPT_REGEX = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,items = ops.selector.split(','), $content
+			var SCRIPT_REGEX = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,selectors = ops.selector.split(','), $content
 			while (SCRIPT_REGEX.test(data)) {
 			    data = data.replace(SCRIPT_REGEX, "")
 			}
-			for (var i = items.length - 1; i >= 0; i--){
-				$content = $(items[i], data).children()
+			for (var i = selectors.length - 1; i >= 0; i--){
+				$content = $(selectors[i], data).children()
 				if(cj.options.debug)
-					console.log($content);
+					console.log($(selectors[i], data));
 				if($content.length > 0)
-					$(items[i]).empty().append($content)
+					$(selectors[i]).empty().append($content)
 			}
 			cj._formInit()
 		}
@@ -569,7 +568,7 @@ cj.prototype.ajaxFile = {
 			}	
 		}
 		iframeHtml += ' />'
-		$(iframeHtml).appendTo(d.body)
+		$(iframeHtml).appendTo(document.body)
 
 		return $('#' + frameId).get(0)
 	},
@@ -606,7 +605,7 @@ cj.prototype.ajaxFile = {
 		if ( s.global )
 			$.event.trigger("ajaxSend", [xml, s]);
 		var uploadCallback = function(isTimeout) {
-			var io = d.getElementById(frameId);
+			var io = document.getElementById(frameId);
 			try {
 				if(io.contentWindow) {
 					xml.responseText = io.contentWindow.document.body?io.contentWindow.document.body.innerHTML:null;
@@ -711,6 +710,7 @@ cj.prototype.ajaxFile = {
 cj.prototype.ajaxResponse = function(data, formId) {
 	var theFormId = (typeof formId == 'undefined') ? false : formId,
 		response, flashMessage = undefined, success = true, stop = false
+
 	if(typeof data == 'object') {
 		response = data.responseText
 	}else{
@@ -748,8 +748,9 @@ cj.prototype.ajaxResponse = function(data, formId) {
 
 	if(theFormId) {
 		$freshForm = $('#'+theFormId, response)
+		console.log($freshForm)
 		if($freshForm.length > 0)
-			cj.resetForm($freshForm.addClass('temporary'))
+			cj.resetForm($freshForm.addClass('cj-replaced'))
 	}
 
 	if(typeof arguments[arguments.length-1] == 'function')
@@ -911,8 +912,8 @@ if (!Array.prototype.indexOf) {
 }
 function objectSize(obj) {
 	var size = 0, key;
-for (var key in obj)
-    if (this.hasOwnProperty(obj)) 
+for (key in obj)
+    if (obj.hasOwnProperty(key)) 
 		size++;
 return size;
 }

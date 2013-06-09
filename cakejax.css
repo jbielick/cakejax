@@ -72,7 +72,7 @@ pre {text-align:left!important;padding:30px;font-size:12px;}
 			box-shadow: 0 0 5px rgba(50,180,50, 0.6)!important;
 }
 
-.temporary, .temporary * {
+.temporary, .temporary *, .cj-replaced, .cj-replaced * {
 	-webkit-animation: justadded .4s ease-in;
 	   -moz-animation: justadded .4s ease-in;
 		 -o-animation: justadded .4s ease-in;
