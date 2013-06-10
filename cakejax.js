@@ -36,54 +36,60 @@ cj.prototype.init = function() {
 		arguments[arguments.length-1].call(this);
 }
 
-cj.prototype.collect = function($form) {
-	var $el = $($form), fdata = {data: {},files: []}
+cj.prototype.collect = function($form, validate) {
+	var $el = $($form), fdata = {data: {},files: [], inputs: {}}
+		defs = {
+			refresh: false,
+		},options = $el.data('cjOptions'), ops = $.extend({}, defs, options)
 
 	if(cj.options.debug)
 		console.log('Collecting: '+$el[0].id)
 
-	fdata.params = {};
-	fdata.formId = $el[0].id;
-	fdata.action = $el.attr('action');
-	fdata.refresh = ($el.data('cj-refresh')) ? true : false;
-	fdata.live = ($el.data('cj-live')) ? $el.data('cj-live') : false;
+	fdata.params = {}
+	fdata.formId = $el[0].id
+	fdata.action = $el.attr('action')
+	fdata.refresh = ops.refresh
+	fdata.live = ops.live
 
-	var uri = fdata.action.substr(1).split('/'),
-		inputData = ''
+	var uri = fdata.action, inputData = ''
+
+	if(uri.indexOf('/') == 0)
+		uri = uri.substr(1)
+	uri = uri.split('/')
 
 	fdata.params.prefix = uri[0] || ''
-	fdata.params.controller = (fdata.params.prefix != '') ? uri[1] : uri[0]
-	fdata.params.action = (fdata.params.prefix != '') ? uri[2] : uri[1]
+	fdata.params.controller = (fdata.params.prefix) ? uri[1] : uri[0]
+	fdata.params.action = (fdata.params.prefix) ? uri[2] : uri[1]
 	if(fdata.params.action == 'add')
 		if(fdata.action.match('[0-9]+'))
-			fdata.params.foreignId = fdata.action.match('[0-9]+')[0]
+			fdata.params.belongsTo = fdata.action.match('[0-9]+')[0]
 	else if (fdata.params.action == 'edit') {
 		if(fdata.action.match('[0-9]+'))
 			fdata.params.id = fdata.action.match('[0-9]+')[0]
 	}
 
 	var mcReg = /([a-z_0-9]+)+/ig,
-		habtmRegCbox = /\[\]/,
-		habtmRegNo = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
+		hasMany = /\[\]/,
+		habtm = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
 		model = '',
 		inputs = $el[0].elements,
 		relationship
 
 	for (var i = inputs.length - 1; i >= 0; i--) {
-		if(inputs[i].name.indexOf('data') > -1) {
+		if(inputs[i].name && inputs[i].name.indexOf('data') > -1) {
 			saveInfo = inputs[i].name.replace('data','').match(mcReg);
 			model = saveInfo[0],
 			field = saveInfo[1],
-			habtmField = (typeof saveInfo[2] != 'undefined') ? saveInfo[2] : undefined
-
+			habtmField = (typeof saveInfo[2] != 'undefined') ? saveInfo[2] : false
 			// if(cj.options.debug)
 			// 	console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
 
-			if(inputs[i].type !== 'submit' && inputs[i].type != 'file') {
+			if(inputs[i].type != 'file') {
 				fdata.data[model] = fdata.data[model] || {}
-				//if name attr matches format of HABTM checkbox input
-				if(habtmRegCbox.test(inputs[i].name) || model == field) {
-					relationship = 'HABTM Simple'
+				fdata.inputs[model] = fdata.inputs[model] || {}
+				//if name attr matches format of HABTM checkbox input ([model][model][])
+				if(hasMany.test(inputs[i].name) || model == field) {
+					relationship = 'hasMany'
 					//Create the necessary structure for an empty HABTM save
 					if(!(model in fdata.data[model]))
 						 fdata.data[model][model] = ''
@@ -97,41 +103,44 @@ cj.prototype.collect = function($form) {
 						fdata.data[model][model].push(inputs[i].value)
 					}
 				}
-				else if (habtmRegNo.test(inputs[i].name) && habtmField)  // HABTM with number indices 
+				else if (habtm.test(inputs[i].name) && habtmField)  // HABTM with number indices 
 				{
-					relationship = 'HABTM Deep'
+					relationship = 'habtm'
 					var habtmIndex = inputs[i].name.match(/\[[0-9]+\]/i)[0].match(/[0-9]+/)[0]
 					fdata.data[model][habtmIndex] = fdata.data[model][habtmIndex] || {}
 					fdata.data[model][habtmIndex][habtmField] = inputs[i].value
 				}
-				else if (!/_$/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
+				else if (!/(^_)|(_$)/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
 				{
-					relationship = 'hasOne, hasMany, or ownProperty'
 					if(inputs[i].type == 'checkbox') {
-						//special handling for non-habtm checkboxes boolean.
 						fdata.data[model][field] = (inputs[i].checked) ? 1 : 0
 					}
 					else if(inputs[i].tagName == 'TEXTAREA' 
 							&& typeof window.ck != 'undefined'
 							&& typeof window.ck[inputs[i].id] != 'undefined') //special handling for CKEDITOR instances
-						fdata.data[model][field] = window.ck[inputs[i].id]
+						fdata.data[model][field] = window.ck[inputs[i].id] //we stored the CKeditor data here on an interval
 					else {
 						fdata.data[model][field] = inputs[i].value
 						if(field == 'id') {
-							fdata._origin = {}
-							fdata._origin['data['+model+'][id]'] = inputs[i].value
+							fdata._origin = {
+								name: 'data['+model+'][id]',
+								value: inputs[i].value
+							}
 						}
 					}
+					//disclaimer: I've not done much testing with multiple select/radio buttons/multiple file input.
 				}
 			}
 			else if (inputs[i].type == 'file' && inputs[i].value != '') {
 				var fileMeta = {}
 				//if action is add, the id in the URI may be the file's foreign (belongsTo) entry,
 				// not the file's ID itself.
+				//throw the files inputs' ids in the files array and it'll be ajax transported on save.
 				fdata.files.push({fileElementId: inputs[i].id});
 			}
-//			if(cj.options.debug)
-//				console.log(relationship);
+			fdata.inputs[model][field] = inputs[i]
+			$el.data('cj-data', fdata)
+			cj.data[fdata.formId] = fdata
 		}
 	}
 	if(cj.options.debug)
@@ -140,11 +149,12 @@ cj.prototype.collect = function($form) {
 	if(fdata.live) {
 		return cj.save({ form: $($form) })
 	}
+	
 	return fdata
 }
 cj.prototype.save = function(ops) {
 	
-	var defs = { form: false }, data = {}, refresh
+	var defs = { form: false }, data = {}, refresh, model, field
 
 	ops = $.extend({}, defs, ops)
 
@@ -152,18 +162,23 @@ cj.prototype.save = function(ops) {
 		var formId = $(ops.form).attr('id')
 		data[formId] = cj.data[formId]
 	}
-	else
-		data = cj.data;
-
+	console.log(data[formId])
 	if(objectSize(data) > 0 && data[formId]) {
-
-		cj.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
 
 		if(cj.options.debug)
 			console.log(data)
 
 		for (var formId in data) {
 			if( data.hasOwnProperty( formId ) ) {
+				
+				if(!cj._validate(data[formId]))
+					return false
+				
+				if(!cj._callback('beforeSave', $(ops.form)))
+					return false
+				
+				cj.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
+				
 				var req = data[formId];
 
 				cj.setButton({status:'duringSave', disabled: true, scope: $('#'+formId)});
@@ -217,35 +232,67 @@ cj.prototype.save = function(ops) {
 	else
 		cj.flash('No changes to save!')
 }
-cj.prototype._validate = function(ops) {
-	// for(var form in cj.validates)
-	// 	if(cj.validates.hasOwnProperty(form))
-	// 		for(var model in form)
-	// 			if(form.hasOwnProperty(model))
-	// 				{
-	// 					
-	// 				}
-	// 
-	
-	for(var form in request)
-			if(request in cj.validates) {
-				for(var vtype in cj.validates[request]) {
-					if(validates.hasOwnProperty(vtype)) {
-						if(vtype == 'notempty') {
-							for(var input in validates[request][vtype]) {
-								if($(input).val() == '')
-								{
-									cj.flash('The field '+input.match(/\[[A-Za-z0-9]+\]$/i)[0]+' is required');
-									$(input).focus();
-									return false;
+cj.prototype._validate = function(params) {
+	if(cj.options.debug)
+		console.log('Validating...')
+	var model,field,input,value,ruleGroup,rule,msgs = [],msg
+	$('form .verror').remove()
+	for(model in cj.validate)
+		if(cj.validate.hasOwnProperty(model))
+			if(model in params.data)
+				for(field in cj.validate[model])
+					if(cj.validate[model].hasOwnProperty(field) && field in params.data[model])
+						for(ruleGroup in cj.validate[model][field])
+							if(cj.validate[model][field].hasOwnProperty(ruleGroup)) {
+								input = params.inputs[model][field]
+								value = params.data[model][field]
+								rg = cj.validate[model][field][ruleGroup]
+								if(typeof rg.rule == 'object') {
+									for (var i=0; i < rg.rule.length; i++) {
+										if(rg.rule[i] in cj._validate.rules && rg.rule[i] != 'match') {
+											if(!cj._validate.rules[rg.rule[i]](value)) {
+												msgs.push({input:input,message: rg.message})
+											}
+										} else if (rg.rule[i] == 'match') {
+											if(!rg.pattern.test(value)) {
+												msgs.push({input:input,message:rg.message})
+											}
+										}
+									}
+								} else if (typeof rg.rule == 'function'){
+									if(!rg.rule(value))
+										msgs.push({input:input,message:rg.message})
 								}
 							}
-						}
-					}
-				}
+	if(msgs.length > 0) {
+		for (var i=0; i < msgs.length; i++) {
+			var $input = $(msgs[i].input), $msg = $('<div class="verror justadded"></div>').text(msgs[i].message),
+				$cur = $input.parent('.input').find('.verror')
+			if($cur.length > 0 && msgs[i].message) {
+				$cur.append('<br>'+msgs[i].message)
+			} else if (msgs[i].message){
+				$input.parent().css('position','relative').append($msg).addClass('verror')
 			}
-			else
-				return true;
+		}
+	} else
+		return true
+}
+cj.prototype._validate.rules = {
+	notEmpty: function(i) {
+		var i = i.trim()
+		if(!i || i == '' || !i || i.length == 0)
+			return false
+		else return true
+	},
+	'boolean': function(i) {
+		return (typeof i == 'boolean' || /(0|1)/.test(i))
+	},
+	alphaNumeric: function(i) {
+		return !/[^a-z0-9]/ig.test(i)
+	},
+	email: function(i) {
+		return true
+	}
 }
 cj.prototype._callback = function(method, $form) {
 	var $form = $form || null
@@ -311,19 +358,17 @@ cj.prototype._formInit = function(form) {
 
 	var $forms = $('form')
 
-	$forms.each(function(index)
-	{
-
-		if(!$(this).data('cj-data') || $(this).data('cj-data') == false)
-		{
+	$forms.each(function(index) {
+		if(!$(this).data('cj-data') || $(this).data('cj-data') == false) {
+			
 			if(cj.options.debug)
 				console.log('\t\tNow Listening To: '+$(this).attr('id'));
 
 			var $el = $(this), formId = $el.attr('id')
-			
-				$el.data('cj-data', {formId: formId || 'Form'})
-				.on('submit', function(e)
-				{
+
+				$el
+				.data('cj-data', {formId: formId || 'Form'})
+				.on('submit', function(e) {
 					e.preventDefault()
 					
 					var trigger = $(this).data('cj-trigger'),
@@ -331,13 +376,11 @@ cj.prototype._formInit = function(form) {
 						ops = {form: $form}
 
 					window.prompted = true
-
-					if(!cj._callback('beforeSave', $form))
-						return false
 					
 					if($form.hasClass('temporary'))
 						ops.refresh = true
 
+					cj.collect($form)
 					cj.save(ops)
 			})
 
@@ -350,18 +393,13 @@ cj.prototype._formInit = function(form) {
 		if(e.type == 'input' || e.type == 'keyup') {
 			clearTimeout(cj.collectTimeout)
 			cj.collectTimeout = setTimeout(function() {
-					cj.store($form)
+					cj.collect($form)
 				}, 400)
 		} else {
-			cj.store($form)
+			cj.collect($form)
 		}
 		cj.setButton({status: 'beforeSave', disabled: false, scope: $form})
 	});
-}
-cj.prototype.store = function($form, data) {
-	var data = cj.collect($form)
-	$form.data('cj-data', data)
-	cj.data[$form[0].id] = data
 }
 cj.prototype.setButton = function(options) {
 	var defs = {
