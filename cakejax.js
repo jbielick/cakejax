@@ -69,8 +69,8 @@ cj.prototype.collect = function($form, validate) {
 	}
 
 	var mcReg = /([a-z_0-9]+)+/ig,
-		hasMany = /\[\]/,
-		habtm = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
+		habtm = /\[\]/,
+		hasMany = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
 		model = '',
 		inputs = $el[0].elements,
 		relationship
@@ -97,10 +97,13 @@ cj.prototype.collect = function($form, validate) {
 					if(inputs[i].type == 'checkbox' && inputs[i].checked
 						|| inputs[i].type == 'hidden' && inputs[i].value != '') {
 						//turn the empty string into an array*
-						if(typeof fdata.data[model][model] != 'object')
+						if(typeof fdata.data[model][model] != 'object') {
 							fdata.data[model][model] = []
+							fdata.inputs[model][model] = []
+						}
 						//and add the ID of that HABTM record
 						fdata.data[model][model].push(inputs[i].value)
+						fdata.inputs[model][model].push(inputs[i])
 					}
 				}
 				else if (habtm.test(inputs[i].name) && habtmField)  // HABTM with number indices 
@@ -109,6 +112,8 @@ cj.prototype.collect = function($form, validate) {
 					var habtmIndex = inputs[i].name.match(/\[[0-9]+\]/i)[0].match(/[0-9]+/)[0]
 					fdata.data[model][habtmIndex] = fdata.data[model][habtmIndex] || {}
 					fdata.data[model][habtmIndex][habtmField] = inputs[i].value
+					fdata.inputs[model][habtmIndex] = fdata.data[model][habtmIndex] || {}
+					fdata.inputs[model][habtmIndex][habtmField] = inputs[i]
 				}
 				else if (!/(^_)|(_$)/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
 				{
@@ -128,17 +133,26 @@ cj.prototype.collect = function($form, validate) {
 							}
 						}
 					}
+					fdata.inputs[model][field] = inputs[i]
 					//disclaimer: I've not done much testing with multiple select/radio buttons/multiple file input.
 				}
 			}
 			else if (inputs[i].type == 'file' && inputs[i].value != '') {
-				var fileMeta = {}
 				//if action is add, the id in the URI may be the file's foreign (belongsTo) entry,
 				// not the file's ID itself.
 				//throw the files inputs' ids in the files array and it'll be ajax transported on save.
-				fdata.files.push({fileElementId: inputs[i].id});
+				for (var z = inputs[i].files.length - 1; z >= 0; z--){
+					console.log(inputs[i].files[z]);
+				}
+				if(hasMany.test(inputs[i].name)) {
+					fdata.inputs[model] = fdata.inputs[model] || []
+					fdata.inputs[model].push({})
+					fdata.inputs[model][fdata.inputs[model].length-1][field] = inputs[i]
+				} else {
+					fdata.inputs[model][field] = inputs[i]
+				}
+				fdata.files.push({fileElementId: inputs[i].id})
 			}
-			fdata.inputs[model][field] = inputs[i]
 			$el.data('cj-data', fdata)
 			cj.data[fdata.formId] = fdata
 		}
@@ -236,7 +250,8 @@ cj.prototype._validate = function(params) {
 	if(cj.options.debug)
 		console.log('Validating...')
 	var model,field,input,value,ruleGroup,rule,msgs = [],msg
-	$('form .verror').remove()
+	$('form .input .verror').remove()
+	$('.verror').removeClass('verror')
 	for(model in cj.validate)
 		if(cj.validate.hasOwnProperty(model))
 			if(model in params.data)
@@ -250,7 +265,7 @@ cj.prototype._validate = function(params) {
 								if(typeof rg.rule == 'object') {
 									for (var i=0; i < rg.rule.length; i++) {
 										if(rg.rule[i] in cj._validate.rules && rg.rule[i] != 'match') {
-											if(!cj._validate.rules[rg.rule[i]](value)) {
+											if(cj._validate.rules[rg.rule[i]](value) === false) {
 												msgs.push({input:input,message: rg.message})
 											}
 										} else if (rg.rule[i] == 'match') {
@@ -260,18 +275,19 @@ cj.prototype._validate = function(params) {
 										}
 									}
 								} else if (typeof rg.rule == 'function'){
-									if(!rg.rule(value))
+									if(rg.rule(value) === false)
 										msgs.push({input:input,message:rg.message})
 								}
 							}
 	if(msgs.length > 0) {
 		for (var i=0; i < msgs.length; i++) {
-			var $input = $(msgs[i].input), $msg = $('<div class="verror justadded"></div>').text(msgs[i].message),
-				$cur = $input.parent('.input').find('.verror')
+			var $input = $(msgs[i].input), $cont = $('<div class="verror justadded"></div>'), $msg = $('<div class="verror-message">'+msgs[i].message+'</div>')
+				$cur = $input.parent('.input').find('.verror .verror-message')
+			$cont.append($msg)
 			if($cur.length > 0 && msgs[i].message) {
-				$cur.append('<br>'+msgs[i].message)
+				$cur.append('<br>').append(msgs[i].message)
 			} else if (msgs[i].message){
-				$input.parent().css('position','relative').append($msg).addClass('verror')
+				$input.parent().css('position','relative').addClass('hasError').append($cont)
 			}
 		}
 	} else
@@ -282,7 +298,6 @@ cj.prototype._validate.rules = {
 		var i = i.trim()
 		if(!i || i == '' || !i || i.length == 0)
 			return false
-		else return true
 	},
 	'boolean': function(i) {
 		return (typeof i == 'boolean' || /(0|1)/.test(i))
@@ -291,14 +306,20 @@ cj.prototype._validate.rules = {
 		return !/[^a-z0-9]/ig.test(i)
 	},
 	email: function(i) {
-		return true
+		var r = /^([A-Za-z0-9_\-\.])+\@([A-Za-z0-9_\-\.])+\.([A-Za-z]{2,4})$/
+		return r.test(i)
+	},
+	url: function(i) {
+		var r = /(http[s]?:\/\/){1}((([a-z\d]([a-z\d-]*[a-z\d])*)\.)+[a-z]{2,}|((\d{1,3}\.){3}\d{1,3}))(\:\d+)?(\/[-a-z\d%_.~+]*)*(\?[;&a-z\d%_.~+=-]*)?(\#[-a-z\d_]*)?/i
+		return r.test(i)
 	}
 }
 cj.prototype._callback = function(method, $form) {
 	var $form = $form || null
 	for(var selector in cj.callbacks)
 		if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
-			return cj.callbacks[selector][method].call(this, $form)
+			if(cj.callbacks[selector][method].call(this, $form) === false)
+				return false
 	return true
 }
 cj.prototype.del = function(params) {
@@ -327,8 +348,7 @@ cj.prototype.del = function(params) {
 							cj.refresh(refresh);
 					})
 				},
-				error: function(e, xhr, req)
-				{
+				error: function(e, xhr, req) {
 					console.log(e, xhr, req);
 				}
 			});
