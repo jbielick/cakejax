@@ -1,5 +1,6 @@
 /**==============================================
-*	CakeJax v0.5.3 BETA
+*	CakeJax v0.5.4 BETA
+*	6/14/2013
 *	 
 *	 ___ ___    _   ___ __  __ ___ _  _ _____
 *	| __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -558,6 +559,9 @@ cj.prototype.sort = function(selector, items, handle) {
 		helper: cj.util.fixHelper,
 		cursor: 'move',
 		handle: handle,
+		start: function(e, ui){
+			ui.placeholder.height(ui.item.height());
+		},
 		update: function(event, ui) {
 			var controller = $(this).data('cj-controller')
 			if(controller) {
@@ -816,7 +820,7 @@ cj.prototype.ajaxResponse = function(data, formId) {
 }
 cj.prototype.flash = function(options)
 {
-	var modalCount = $('.flashMessageModal > div').length;
+	var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length;
 	var defs = {
 		msg: 'No message supplied',
 		mask: false,
@@ -888,7 +892,7 @@ cj.prototype.flash = function(options)
 			{
 				$('#flashMessage-'+modalCount).fadeOut(function() {
 					$(this).remove();
-					if($('.flashMessageModal > div').length == 1)
+					if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
 						cj.close();
 				});
 			}, ops.linger);
