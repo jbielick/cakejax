@@ -301,10 +301,13 @@ cj.prototype._validate.rules = {
 			return false
 	},
 	'boolean': function(i) {
-		return (typeof i == 'boolean' || /(0|1)/.test(i))
+		return ( typeof i == 'boolean' || /(0|1)/.test(i) )
 	},
 	alphaNumeric: function(i) {
 		return !/[^a-z0-9]/ig.test(i)
+	},
+	alphaAndNumeric: function(i) {
+		return ( this.alphaNumeric(i) && /([a-z])+([0-9])+/ig.test(i) )
 	},
 	email: function(i) {
 		var r = /^([A-Za-z0-9_\-\.])+\@([A-Za-z0-9_\-\.])+\.([A-Za-z]{2,4})$/
