@@ -1,6 +1,5 @@
 /**==============================================
-*	CakeJax v0.5.4 BETA
-*	6/14/2013
+*	CakeJax v0.5.3 BETA
 *	 
 *	 ___ ___    _   ___ __  __ ___ _  _ _____
 *	| __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -186,6 +185,9 @@ cj.prototype.save = function(ops) {
 		for (var formId in data) {
 			if( data.hasOwnProperty( formId ) ) {
 				
+				if(!cj._callback('beforeValidate', $(ops.form)))
+					return false
+				
 				if(!cj._validate(data[formId]))
 					return false
 				
@@ -210,11 +212,11 @@ cj.prototype.save = function(ops) {
 							cj.ajaxResponse(data, formId, function(response, success) {
 								if(success) {
 									cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: $('#'+formId)})
+									cj._callback('afterSave', ops.form)
 									delete cj.data[formId]
 								}
 								if(success && req.refresh)
 									cj.refresh()
-								cj._callback('afterSave', ops.form, success)
 							})
 						},
 						error: function(e, xhr, ms) {
@@ -301,13 +303,10 @@ cj.prototype._validate.rules = {
 			return false
 	},
 	'boolean': function(i) {
-		return ( typeof i == 'boolean' || /(0|1)/.test(i) )
+		return (typeof i == 'boolean' || /(0|1)/.test(i))
 	},
 	alphaNumeric: function(i) {
 		return !/[^a-z0-9]/ig.test(i)
-	},
-	alphaAndNumeric: function(i) {
-		return ( this.alphaNumeric(i) && /([a-z])+([0-9])+/ig.test(i) )
 	},
 	email: function(i) {
 		var r = /^([A-Za-z0-9_\-\.])+\@([A-Za-z0-9_\-\.])+\.([A-Za-z]{2,4})$/
@@ -318,29 +317,46 @@ cj.prototype._validate.rules = {
 		return r.test(i)
 	}
 }
-cj.prototype._callback = function(method, $form) {
-	var $form = $form || null
-	for(var selector in cj.callbacks)
-		if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
-			if(cj.callbacks[selector][method].call(this, $form) === false)
-				return false
-	return true
+cj.prototype._callback = function(method, subject) {
+	var $form = (subject.jquery) ? subject : null,
+		params = ($form) ? null : subject
+	if($form) {
+		for(var selector in cj.callbacks)
+			if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
+				if(cj.callbacks[selector][method].call(this, $form) === false)
+					return false
+		return true
+	} else if (params) {
+		for(var model in cj.callbacks)
+			if(cj.callbacks.hasOwnProperty(model) && model.toLowerCase() == params.controller.substr(0,params.controller.length-1) && ( method in cj.callbacks[model]))
+				if(cj.callbacks[model][method].call(this, params) === false)
+					return false
+		return true
+	}
 }
 cj.prototype.del = function(params) {
-	var prettyController = params.item || 'item',
-		refresh = params.refresh || false;
+	var item = params.item || 'this item',
+		refresh = params.refresh || false,
+		$caller = $(params.caller)
 
+	if(cj._callback('beforeDelete', params) === false)
+		return false
+		
 	if(cj.options.debug)
 		console.log('Deleting: ', params)
+	
+	if(typeof params.controller != 'undefined' && typeof params.id != 'undefined')
+	{
+		if(confirm("Are you sure you want to delete "+item+"?")) {
+			
+			var $deletable = $caller.parents('.deletable').first()
+			if(!$deletable[0])
+				$deletable = $caller.parents('tr').first()
+			console.log($deletable)
+			$deletable.fadeOut(function(){$deletable.remove()})
 
-	if(confirm("Are you sure you want to delete this "+prettyController+"?")) {
-		var $deletable = $(params.caller).parents('.deletable').eq(0)
-		$deletable.fadeOut(function(){$(this).remove()})
-
-		if(typeof params.controller != 'undefined' && typeof params.id != 'undefined')
-		{
-			var prefix = (typeof params.prefix != 'undefined') ? '/'+params.prefix : '';
-			var url = prefix+'/'+params.controller+'/delete/'+params.id;
+			var prefix = (typeof params.prefix != 'undefined') ? '/'+params.prefix : '',
+				url = prefix+'/'+params.controller+'/delete/'+params.id
 
 			$.ajax({
 				url: url,
@@ -348,14 +364,17 @@ cj.prototype.del = function(params) {
 				cache: false,
 				success: function(data) {
 					cj.ajaxResponse(data, undefined, function(response, success) {
-						if(success && refresh)
-							cj.refresh(refresh);
+						if(success) {
+							cj._callback('afterDelete', params)
+							if(refresh)
+								cj.refresh(refresh)
+						}
 					})
 				},
-				error: function(e, xhr, req) {
-					console.log(e, xhr, req);
+				error: function(xhr, e, msg) {
+					console.log(xhr, e, msg);
 				}
-			});
+			})
 		}
 	}
 }
@@ -526,7 +545,7 @@ cj.prototype.get = function(options, callback) {
 			if(typeof arguments[arguments.length-1] == 'function')
 				arguments[arguments.length-1].call(this, $content);
 		},
-		error: function(xhr, status, e) {
+		error: function(xhr, e, msg) {
 			console.log(e)
 			cj.ajaxResponse(xhr.responseText)
 		}
@@ -536,7 +555,8 @@ cj.prototype._binds = function() {
 	cj.bind('click', '[data-cj-get]', cj.util.getHandler)
 	cj.bind('click', '.modal-close, #mask', cj.util.closeHandler)
 	cj.bind('keyup', cj.util.closeHandler)
-	cj.bind('change', 'input[type="file"]', cj.util.filePreview)
+	cj.bind('change', 'input[type="file"]:not([multiple])', cj.util.filePreview)
+	cj.bind('click', '[data-cj-delete]', cj.util.deleteHandler)
 }
 cj.prototype.bind = function(e, el, callback) {
 	// if(typeof callback == 'undefined')
@@ -568,16 +588,13 @@ cj.prototype.sort = function(selector, items, handle) {
 		update: function(event, ui) {
 			var controller = $(this).data('cj-controller')
 			if(controller) {
-				var sortableInstance = (ui.item[0].parentNode.id || ui.item[0].parentNode.className);
-				cj.data[sortableInstance] = {
+				cj.data.sortables = cj.data.sortables || []
+				cj.data.sortables.push({
 					action: '/admin/'+$(this).data('cj-controller')+'/reorder',
 					data: $(this).sortable('serialize'),
 					type: 'order'
-				}
-				cj.setButton({
-					status: 'beforeSave',
-					disabled: false
-					})
+				})
+				cj.setButton({status: 'beforeSave',disabled: false})
 			}
 			else cj.flash({msg: 'You forgot to define a \'data-cj-controller\' attribute on your sortable container!', error: true});
 		}
@@ -604,13 +621,16 @@ cj.prototype.uploadFiles = function(req, refresh)
 		{
 			cj.ajaxResponse(data.responseText, req.formId, function(response, success)
 			{
-				if(success && refresh) {
-					cj.refresh();
-					cj._formInit();
+				if(success) {
+					cj.setButton({status:'afterSave',disabled: false,highlight: false});
+					cj._callback('afterSave', ops.form, success)
+					if(refresh) {
+						cj.refresh();
+						cj._formInit();
+					}
 					delete cj.data[req.formId]
 				}
-			});
-			cj.setButton({status:'afterSave',disabled: false,highlight: false});
+			})
 		},
 		error: function (err, status, e)
 		{
@@ -908,6 +928,11 @@ cj.prototype.close = function()
 	});
 }
 cj.prototype.util = {
+	deleteHandler: function(e) {
+		var params = $(e.currentTarget).data('cjDelete')
+		params = $.extend({}, params, {caller: e.currentTarget})
+		cj.del(params)
+	},
 	closeHandler: function(e) {
 		if( e.keyCode == 27 
 			|| e.target.className.indexOf('.modal-close') > -1 
@@ -965,7 +990,6 @@ cj.prototype.util = {
 }
 
 var cj = new cj()
-cj.init()
 
 if (!Array.prototype.indexOf) { 
     Array.prototype.indexOf = function(obj, start) {
