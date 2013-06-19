@@ -1,5 +1,6 @@
 /**==============================================
 *	CakeJax v0.5.3 BETA
+*	6/18/2013
 *	 
 *	 ___ ___    _   ___ __  __ ___ _  _ _____
 *	| __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -141,9 +142,11 @@ cj.prototype.collect = function($form, validate) {
 				//if action is add, the id in the URI may be the file's foreign (belongsTo) entry,
 				// not the file's ID itself.
 				//throw the files inputs' ids in the files array and it'll be ajax transported on save.
-				for (var z = inputs[i].files.length - 1; z >= 0; z--){
-					console.log(inputs[i].files[z]);
-				}
+				// for (var z = inputs[i].files.length - 1; z >= 0; z--){
+				// 	console.log(inputs[i].files[z]);
+				// }
+				
+				fdata.inputs[model] = fdata.inputs[model] || {}
 				if(hasMany.test(inputs[i].name)) {
 					fdata.inputs[model] = fdata.inputs[model] || []
 					fdata.inputs[model].push({})
@@ -168,54 +171,62 @@ cj.prototype.collect = function($form, validate) {
 }
 cj.prototype.save = function(ops) {
 	
-	var defs = { form: false }, data = {}, refresh, model, field
+	var defs = { requests: false }, data = {}, refresh, model, field, request, requests, requestId
 
 	ops = $.extend({}, defs, ops)
 
-	if(ops.form) {
-		var formId = $(ops.form).attr('id')
-		data[formId] = cj.data[formId]
+	if(ops.requests) {
+		ops.requests = ops.requests.toString().split(',')
+		for (var i=0; i < ops.requests.length; i++) {
+			if(ops.requests[i])
+				data[ops.requests[i]] = cj.data[ops.requests[i]]
+		}
+	} else {
+		data = cj.data
 	}
-	console.log(data[formId])
-	if(objectSize(data) > 0 && data[formId]) {
+	
+	if(objectSize(data) > 0) {
 
 		if(cj.options.debug)
 			console.log(data)
 
-		for (var formId in data) {
-			if( data.hasOwnProperty( formId ) ) {
+		for (requestId in data) {
+			if( data.hasOwnProperty( requestId ) ) {
 				
-				if(!cj._callback('beforeValidate', $(ops.form)))
-					return false
-				
-				if(!cj._validate(data[formId]))
-					return false
-				
-				if(!cj._callback('beforeSave', $(ops.form)))
-					return false
+				if(ops.form) {
+					if(!cj._callback('beforeValidate', $(ops.form)))
+						return false
+
+					if(!cj._validate(data[requestId]))
+						return false
+
+					if(!cj._callback('beforeSave', $(ops.form)))
+						return false
+				}
 				
 				cj.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
 				
-				var req = data[formId];
+				request = data[requestId];
 
-				cj.setButton({status:'duringSave', disabled: true, scope: $('#'+formId)});
+				cj.setButton({status:'duringSave', disabled: true, scope: $('#'+requestId)});
 
-				if(!req.files || req.files && req.files.length == 0) {
+				if(!request.files || request.files && request.files.length == 0) {
 					$.ajax({
-						url: req.action,
+						url: request.action,
 						type: 'POST',
 						dataType: 'text',
-						data: req.data,
+						data: request.data,
 						cache: false,
 						success: function(data)
 						{
-							cj.ajaxResponse(data, formId, function(response, success) {
+							cj.ajaxResponse(data, requestId, function(response, success) {
 								if(success) {
-									cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: $('#'+formId)})
-									cj._callback('afterSave', ops.form)
-									delete cj.data[formId]
+									cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: $('#'+requestId)})
+									if(ops.form)
+										cj._callback('afterSave', ops.form)
+									delete cj.data[requestId]
 								}
-								if(success && req.refresh)
+								if(success && request.refresh)
 									cj.refresh()
 							})
 						},
@@ -240,8 +251,8 @@ cj.prototype.save = function(ops) {
 						}
 					})
 				}
-				else if(req.files && req.files.length > 0) {
-					cj.uploadFiles(req, req.refresh);
+				else if(request.files && request.files.length > 0) {
+					cj.uploadFiles(request, request.refresh);
 				}
 			}
 		}
@@ -265,7 +276,11 @@ cj.prototype._validate = function(params) {
 								input = params.inputs[model][field]
 								value = params.data[model][field]
 								rg = cj.validate[model][field][ruleGroup]
-								if(typeof rg.rule == 'object') {
+								if (typeof rg.rule == 'function'){
+									if(rg.rule(value) === false)
+										msgs.push({input:input,message:rg.message})
+								} else {
+									rg.rule = rg.rule.toString().split(',')
 									for (var i=0; i < rg.rule.length; i++) {
 										if(rg.rule[i] in cj._validate.rules && rg.rule[i] != 'match') {
 											if(cj._validate.rules[rg.rule[i]](value) === false) {
@@ -277,9 +292,6 @@ cj.prototype._validate = function(params) {
 											}
 										}
 									}
-								} else if (typeof rg.rule == 'function'){
-									if(rg.rule(value) === false)
-										msgs.push({input:input,message:rg.message})
 								}
 							}
 	if(msgs.length > 0) {
@@ -552,11 +564,12 @@ cj.prototype.get = function(options, callback) {
 	})
 }
 cj.prototype._binds = function() {
-	cj.bind('click', '[data-cj-get]', cj.util.getHandler)
-	cj.bind('click', '.modal-close, #mask', cj.util.closeHandler)
-	cj.bind('keyup', cj.util.closeHandler)
+	cj.bind('click', '[data-cj-get]', cj.handlers.get)
+	cj.bind('click', '.modal-close, #mask', cj.handlers.close)
+	cj.bind('keyup', cj.handlers.close)
 	cj.bind('change', 'input[type="file"]:not([multiple])', cj.util.filePreview)
-	cj.bind('click', '[data-cj-delete]', cj.util.deleteHandler)
+	cj.bind('click', '[data-cj-delete]', cj.handlers.del)
+	cj.bind('click', '[data-cj-sort-save]', cj.handlers.sortSave)
 }
 cj.prototype.bind = function(e, el, callback) {
 	// if(typeof callback == 'undefined')
@@ -583,24 +596,19 @@ cj.prototype.sort = function(selector, items, handle) {
 		cursor: 'move',
 		handle: handle,
 		start: function(e, ui){
-			ui.placeholder.height(ui.item.height());
+			ui.placeholder.height(ui.item.height())
 		},
 		update: function(event, ui) {
-			var controller = $(this).data('cj-controller')
-			if(controller) {
-				cj.data.sortables = cj.data.sortables || []
-				cj.data.sortables.push({
-					action: '/admin/'+$(this).data('cj-controller')+'/reorder',
-					data: $(this).sortable('serialize'),
-					type: 'order'
-				})
-				cj.setButton({status: 'beforeSave',disabled: false})
+			var action = $(this).data('cjAction')
+			if(action) {
+				ui.item.parents('[data-cj-action]').first().data('cjSortData', $(this).sortable('serialize'))
+				// cj.setButton({status: 'beforeSave', disabled: false})
 			}
-			else cj.flash({msg: 'You forgot to define a \'data-cj-controller\' attribute on your sortable container!', error: true});
+			else cj.flash({msg: 'You forgot to define a \'data-cj-action\' attribute on your sortable container!', error: true});
 		}
-	}).disableSelection();
+	}).disableSelection()
 }
-cj.prototype.uploadFiles = function(req, refresh)
+cj.prototype.uploadFiles = function(request, refresh)
 {
 	// $el.ajaxStart(function(){
 	// 	//
@@ -611,15 +619,15 @@ cj.prototype.uploadFiles = function(req, refresh)
 	var nocache = new Date().getTime();
 
 	cj.ajaxFile.upload({
-		url: req.action+'?_='+nocache,
+		url: request.action+'?_='+nocache,
 		secureuri:false,
-		data: $('#'+req.formId).serializeArray(),
-		files: req.files,
+		data: $('#'+request.formId).serializeArray(),
+		files: request.files,
 		dataType: 'text',
 		async: false,
 		complete: function (data, status)
 		{
-			cj.ajaxResponse(data.responseText, req.formId, function(response, success)
+			cj.ajaxResponse(data.responseText, request.formId, function(response, success)
 			{
 				if(success) {
 					cj.setButton({status:'afterSave',disabled: false,highlight: false});
@@ -628,7 +636,7 @@ cj.prototype.uploadFiles = function(req, refresh)
 						cj.refresh();
 						cj._formInit();
 					}
-					delete cj.data[req.formId]
+					delete cj.data[request.formId]
 				}
 			})
 		},
@@ -802,7 +810,7 @@ cj.prototype.ajaxResponse = function(data, formId) {
 		try {
 			response = $.parseHTML(data, document, false);
 		} catch(e) {
-			response = data;
+			response = data
 		}
 	}
 	flashMessage = $('#flashMessage', response).text();
@@ -815,7 +823,7 @@ cj.prototype.ajaxResponse = function(data, formId) {
 		cj.flash(flashOps)
 	}
 
-	var $notices = $('p.error, .cake-error, .notice, pre', response),
+	var $notices = $('pre.cake-error, .notice, p.error, pre', response),
 		errors = '<pre>';
 
 	if($notices.length > 0) {
@@ -927,19 +935,37 @@ cj.prototype.close = function()
 		$(this).fadeOut('fast',function(){$(this).remove()});
 	});
 }
-cj.prototype.util = {
-	deleteHandler: function(e) {
+cj.prototype.handlers = {
+	sortSave: function(e) {
+		var selector = $(e.currentTarget).data('cjSortSave'), uid, requests = []
+		$(selector).each(function() {
+			var $el = $(this)
+			if($el.data('cjSortData')) {
+				uid = new Date().getTime()
+				requests.push(String(uid))
+				cj.data[uid] = {
+					action: $el.data('cjAction'),
+					data: $el.data('cjSortData'),
+					formId: uid,
+					refresh: false
+				}
+			}
+		})
+		console.log(requests)
+		cj.save({requests: requests})
+	},
+	del: function(e) {
 		var params = $(e.currentTarget).data('cjDelete')
 		params = $.extend({}, params, {caller: e.currentTarget})
 		cj.del(params)
 	},
-	closeHandler: function(e) {
+	close: function(e) {
 		if( e.keyCode == 27 
 			|| e.target.className.indexOf('.modal-close') > -1 
 			|| e.target.id == 'mask')
 			cj.close()
 	},
-	getHandler: function(e) {
+	get: function(e) {
 		e.preventDefault()
 		var defs = {
 			insertLoc: false,
@@ -956,7 +982,9 @@ cj.prototype.util = {
 			})
 		}
 		if(getonce) $(this).data('cj-got', true)
-	},
+	}
+}
+cj.prototype.util = {
 	fixHelper: function(e, ui) {
 		var $original = ui,
 			$helper = ui.clone();
