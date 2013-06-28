@@ -239,8 +239,7 @@ cj.prototype.save = function(ops) {
 									html: true,
 									autoRemove: false
 								})
-								$('<div></div>').load('/login', null, function(page)
-								{
+								$('<div></div>').load('/login', null, function(page) {
 									$('.flashMessageModal').append($(this))
 									$('.flashMessageModal form').addClass('cj')
 									cj._formInit()
@@ -252,7 +251,35 @@ cj.prototype.save = function(ops) {
 					})
 				}
 				else if(request.files && request.files.length > 0) {
-					cj.uploadFiles(request, request.refresh);
+					var nocache = new Date().getTime();
+					cj.ajaxFile.upload({
+						url: request.action+'?_='+nocache,
+						secureuri:false,
+						data: $('#'+request.formId).serializeArray(),
+						files: request.files,
+						dataType: 'text',
+						async: false,
+						complete: function (data, status)
+						{
+							cj.ajaxResponse(data.responseText, request.formId, function(response, success)
+							{
+								if(success) {
+									cj.setButton({status:'afterSave',disabled: false,highlight: false});
+									cj._callback('afterSave', ops.form, success)
+									if(refresh) {
+										cj.refresh();
+										cj._formInit();
+									}
+									delete cj.data[requestId]
+								}
+							})
+						},
+						error: function (err, status, e)
+						{
+							cj.setButton({status:'saveFail',disabled: false,highlight: true});
+							console.log(err, status, e);
+						}
+					})
 				}
 			}
 		}
@@ -607,46 +634,6 @@ cj.prototype.sort = function(selector, items, handle) {
 			else cj.flash({msg: 'You forgot to define a \'data-cj-action\' attribute on your sortable container!', error: true});
 		}
 	}).disableSelection()
-}
-cj.prototype.uploadFiles = function(request, refresh)
-{
-	// $el.ajaxStart(function(){
-	// 	//
-	// })
-	// .ajaxComplete(function(){
-	// 	//
-	// });
-	var nocache = new Date().getTime();
-
-	cj.ajaxFile.upload({
-		url: request.action+'?_='+nocache,
-		secureuri:false,
-		data: $('#'+request.formId).serializeArray(),
-		files: request.files,
-		dataType: 'text',
-		async: false,
-		complete: function (data, status)
-		{
-			cj.ajaxResponse(data.responseText, request.formId, function(response, success)
-			{
-				if(success) {
-					cj.setButton({status:'afterSave',disabled: false,highlight: false});
-					cj._callback('afterSave', ops.form, success)
-					if(refresh) {
-						cj.refresh();
-						cj._formInit();
-					}
-					delete cj.data[request.formId]
-				}
-			})
-		},
-		error: function (err, status, e)
-		{
-			cj.setButton({status:'saveFail',disabled: false,highlight: true});
-			console.log(err, status, e);
-		}
-	})
-	return false;
 }
 cj.prototype.ajaxFile = {
 	createUploadIframe: function(id, uri) {
