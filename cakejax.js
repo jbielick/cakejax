@@ -13,7 +13,9 @@
 *==============================================*/
 
 function cj() {
-	this.options = {}
+	this.options = {
+		view: '#view'
+	}
 	this.data = {}
 	this.listeners = {}
 	this.options.removeAfter = {}
@@ -44,7 +46,7 @@ cj.prototype.collect = function($form, validate) {
 		},options = $el.data('cjOptions'), ops = $.extend({}, defs, options)
 
 	if(cj.options.debug)
-		console.log('Collecting: '+$el[0].id)
+		console.log('Collecting: '+$el[0].id, options)
 
 	fdata.params = {}
 	fdata.formId = $el[0].id
@@ -164,7 +166,7 @@ cj.prototype.collect = function($form, validate) {
 		console.log(fdata.data)//JSON.stringify(fdata.data, null, '\t'));
 
 	if(fdata.live) {
-		return cj.save({ form: $($form) })
+		return cj.save({form:$form})
 	}
 	
 	return fdata
@@ -186,13 +188,11 @@ cj.prototype.save = function(ops) {
 	}
 	
 	if(objectSize(data) > 0) {
-
-		if(cj.options.debug)
-			console.log(data)
-
 		for (requestId in data) {
 			if( data.hasOwnProperty( requestId ) ) {
-				
+				if(cj.options.debug)
+					console.log(data[requestId])
+					
 				if(ops.form) {
 					if(!cj._callback('beforeValidate', $(ops.form)))
 						return false
@@ -208,7 +208,7 @@ cj.prototype.save = function(ops) {
 				
 				request = data[requestId];
 
-				cj.setButton({status:'duringSave', disabled: true, scope: $('#'+requestId)});
+				cj.setButton({status:'duringSave', disabled: true, scope: $(ops.form)});
 
 				if(!request.files || request.files && request.files.length == 0) {
 					$.ajax({
@@ -223,7 +223,7 @@ cj.prototype.save = function(ops) {
 								if(success) {
 									cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: $('#'+requestId)})
 									if(ops.form)
-										cj._callback('afterSave', ops.form)
+										cj._callback('afterSave', ops.form, request.data)
 									delete cj.data[requestId]
 								}
 								if(success && request.refresh)
@@ -276,7 +276,7 @@ cj.prototype._validate = function(params) {
 								input = params.inputs[model][field]
 								value = params.data[model][field]
 								rg = cj.validate[model][field][ruleGroup]
-								if (typeof rg.rule == 'function'){
+								if (typeof rg.rule == 'function') {
 									if(rg.rule(value) === false)
 										msgs.push({input:input,message:rg.message})
 								} else {
@@ -329,13 +329,13 @@ cj.prototype._validate.rules = {
 		return r.test(i)
 	}
 }
-cj.prototype._callback = function(method, subject) {
+cj.prototype._callback = function(method, subject, data) {
 	var $form = (subject.jquery) ? subject : null,
 		params = ($form) ? null : subject
 	if($form) {
 		for(var selector in cj.callbacks)
 			if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
-				if(cj.callbacks[selector][method].call(this, $form) === false)
+				if(cj.callbacks[selector][method].call(this, $form, (typeof data != 'undefined') ? data : null) === false)
 					return false
 		return true
 	} else if (params) {
@@ -411,7 +411,7 @@ cj.prototype._formInit = function(form) {
 	if(!cj.timers)
 		cj.timers = {};
 
-	var $forms = $('form')
+	var $forms = $('form.cakejax')
 
 	$forms.each(function(index) {
 		if(!$(this).data('cj-data') || $(this).data('cj-data') == false) {
@@ -519,8 +519,7 @@ cj.prototype.resetForm = function($form) {
 	if(cj.options.debug) console.log('Form Reset', $form)
 	var formId = $form[0].id, $parent = $('#'+formId).parent()
 
-	$('#'+formId).remove()
-	$parent.append($form)
+	$('#'+formId).replaceWith($form)
 	cj.init()
 	cj._formInit()
 	if(typeof CKEDITOR != 'undefined'){
@@ -536,7 +535,7 @@ cj.prototype.get = function(options, callback) {
 		selector: 'form',
 		insertLoc: false,
 		addClass: ''
-	}
+	}, $content
 	ops = $.extend({}, ops, options)
 
 	$.ajax({
@@ -545,9 +544,12 @@ cj.prototype.get = function(options, callback) {
 		dataType: 'text',
 		cache: false,
 		success: function(data) {
-			var $content = $(ops.selector, data).addClass('temporary none '+ops.addClass)
+			if(ops.selector)
+				$content = $(ops.selector, data).addClass('temporary none cj-got '+ops.addClass)
+			else
+				$content = $(data)
 			if(ops.insertLoc) {
-				$(ops.insertLoc).prepend($content)
+				$(ops.insertLoc).prepend($content.addClass('cj-got').css({display:'none'}))
 				$content.slideDown()
 			}
 			else cj.flash({msg: data, html: true, autoRemove: false, mask: true})
@@ -559,13 +561,12 @@ cj.prototype.get = function(options, callback) {
 		},
 		error: function(xhr, e, msg) {
 			console.log(e)
-			cj.ajaxResponse(xhr.responseText)
+			cj.ajaxResponse(xhr)
 		}
 	})
 }
 cj.prototype._binds = function() {
 	cj.bind('click', '[data-cj-get]', cj.handlers.get)
-	cj.bind('click', '.modal-close, #mask', cj.handlers.close)
 	cj.bind('keyup', cj.handlers.close)
 	cj.bind('change', 'input[type="file"]:not([multiple])', cj.util.filePreview)
 	cj.bind('click', '[data-cj-delete]', cj.handlers.del)
@@ -841,7 +842,6 @@ cj.prototype.ajaxResponse = function(data, formId) {
 
 	if(theFormId) {
 		$freshForm = $('#'+theFormId, response)
-		console.log($freshForm)
 		if($freshForm.length > 0)
 			cj.resetForm($freshForm.addClass('cj-replaced'))
 	}
@@ -861,7 +861,7 @@ cj.prototype.flash = function(options)
 		addClass: '',
 		replace: false,
 		modalClass: false
-	};
+	}
 
 	if (typeof options == 'object')
 		ops = $.extend({}, defs, options)
@@ -870,7 +870,7 @@ cj.prototype.flash = function(options)
 		ops = defs;
 		ops.msg = options;
 	}
-	else return
+	else throw new TypeError('Method \'flash\' cannot be called without arguments.')
 
 	if(ops.replace) {
 		$('[id^="flashMessage-"].'+ops.replace).fadeOut(function(){$(this).remove()})
@@ -879,19 +879,15 @@ cj.prototype.flash = function(options)
 	if(cj.options.debug)
 		ops.autoRemove = false;
 
-	if($('.flashMessageModal').length == 0)
-	{
-		var $modal = $('<div></div>',
-			{
+	if($('.flashMessageModal').length == 0) {
+		var $modal = $('<div></div>', {
 				'class': 'flashMessageModal',
 				id: 'flashMessageModal-'+modalCount
 			}),
 			$close = $('<div></div>').addClass('modal-close').html('&times;'),
-			$mask = $('<div></div>').attr('id', 'mask')
-
-		$modal.append($close);
-
-		var htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</[A-Z][A-Z0-9]*>', 'i');
+			$mask = $('<div></div>').attr('id', 'mask'),
+			htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</[A-Z][A-Z0-9]*>', 'i')
+		$modal.append($close),$([$close[0],$mask[0]]).click(cj.handlers.close)
 		if(ops.html || htmlPattern.test( ops.msg ) )
 			$modal.html(ops.msg)
 		else
@@ -917,16 +913,14 @@ cj.prototype.flash = function(options)
 	else {
 		$('.flashMessageModal').append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>');
 	}
-	if (ops.autoRemove)
-	{
-		cj.removeAfter[modalCount] = setTimeout(function()
-			{
-				$('#flashMessage-'+modalCount).fadeOut(function() {
-					$(this).remove();
-					if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
-						cj.close();
-				});
-			}, ops.linger);
+	if (ops.autoRemove) {
+		setTimeout(function() {
+			$('#flashMessage-'+modalCount).fadeOut(function() {
+				$(this).remove();
+				if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
+					cj.close();
+			});
+		}, ops.linger);
 	}
 }
 cj.prototype.close = function() 
@@ -951,7 +945,6 @@ cj.prototype.handlers = {
 				}
 			}
 		})
-		console.log(requests)
 		cj.save({requests: requests})
 	},
 	del: function(e) {
@@ -960,8 +953,8 @@ cj.prototype.handlers = {
 		cj.del(params)
 	},
 	close: function(e) {
-		if( e.keyCode == 27 
-			|| e.target.className.indexOf('.modal-close') > -1 
+		if(e.keyCode == 27 
+			|| e.target.className.indexOf('modal-close') > -1 
 			|| e.target.id == 'mask')
 			cj.close()
 	},
@@ -969,19 +962,19 @@ cj.prototype.handlers = {
 		e.preventDefault()
 		var defs = {
 			insertLoc: false,
-			addClass: '',
-			getOnce: '',
-			selector: 'form'
-		}, $el = $(e.target), ops = $.extend({}, defs, $el.data('cj-get'))
-		if(!$el.data('cj-got') || !getonce) {
+			addClass: null,
+			getOnce: null,
+			selector: null
+		}, $el = $(e.currentTarget), ops = $.extend({}, defs, $el.data('cj-get'))
+		if(!$el.data('cj-got') || !ops.getOnce) {
 			cj.get({
-				url: url,
-				addClass: addClass,
-				insertLoc: insertLoc,
-				selector: selector
+				url: ops.url,
+				addClass: ops.addClass,
+				insertLoc: ops.insertLoc,
+				selector: ops.selector
 			})
 		}
-		if(getonce) $(this).data('cj-got', true)
+		if(ops.getOnce) $el.data('cj-got', true)
 	}
 }
 cj.prototype.util = {
