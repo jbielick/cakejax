@@ -56,7 +56,7 @@ cj.prototype.collect = function($form, validate) {
 
 	var uri = fdata.action, inputData = ''
 
-	if(uri.indexOf('/') == 0)
+	if(uri.indexOf('/') === 0)
 		uri = uri.substr(1)
 	uri = uri.split('/')
 
@@ -85,7 +85,7 @@ cj.prototype.collect = function($form, validate) {
 			field = saveInfo[1],
 			habtmField = (typeof saveInfo[2] != 'undefined') ? saveInfo[2] : false
 			// if(cj.options.debug)
-			// 	console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
+			console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
 
 			if(inputs[i].type != 'file') {
 				fdata.data[model] = fdata.data[model] || {}
@@ -97,7 +97,7 @@ cj.prototype.collect = function($form, validate) {
 					if(!(model in fdata.data[model]))
 						 fdata.data[model][model] = ''
 					//if a checkbox is found*
-					if(inputs[i].type == 'checkbox' && inputs[i].checked
+					if(inputs[i].type == 'checkbox' && inputs[i].checked || inputs[i].type == 'select-multiple' && inputs[i].value
 						|| inputs[i].type == 'hidden' && inputs[i].value != '') {
 						//turn the empty string into an array*
 						if(typeof fdata.data[model][model] != 'object') {
@@ -105,8 +105,12 @@ cj.prototype.collect = function($form, validate) {
 							fdata.inputs[model][model] = []
 						}
 						//and add the ID of that HABTM record
-						fdata.data[model][model].push(inputs[i].value)
-						fdata.inputs[model][model].push(inputs[i])
+						if(inputs[i].type == 'select-multiple' && typeof $(inputs[i]).val() == 'object') {
+							fdata.data[model][model] = $(inputs[i]).val()
+						} else {
+							fdata.data[model][model].push(inputs[i].value)
+							fdata.inputs[model][model].push(inputs[i])
+						}
 					}
 				}
 				else if (habtm.test(inputs[i].name) && habtmField)  // HABTM with number indices 
@@ -168,7 +172,6 @@ cj.prototype.collect = function($form, validate) {
 	if(fdata.live) {
 		return cj.save({form:$form})
 	}
-	
 	return fdata
 }
 cj.prototype.save = function(ops) {
@@ -227,7 +230,7 @@ cj.prototype.save = function(ops) {
 									delete cj.data[requestId]
 								}
 								if(success && request.refresh)
-									cj.refresh()
+									cj.refresh(request.refresh)
 							})
 						},
 						error: function(e, xhr, ms) {
@@ -239,7 +242,8 @@ cj.prototype.save = function(ops) {
 									html: true,
 									autoRemove: false
 								})
-								$('<div></div>').load('/login', null, function(page) {
+								$('<div></div>').load('/login', null, function(page)
+								{
 									$('.flashMessageModal').append($(this))
 									$('.flashMessageModal form').addClass('cj')
 									cj._formInit()
@@ -251,35 +255,7 @@ cj.prototype.save = function(ops) {
 					})
 				}
 				else if(request.files && request.files.length > 0) {
-					var nocache = new Date().getTime();
-					cj.ajaxFile.upload({
-						url: request.action+'?_='+nocache,
-						secureuri:false,
-						data: $('#'+request.formId).serializeArray(),
-						files: request.files,
-						dataType: 'text',
-						async: false,
-						complete: function (data, status)
-						{
-							cj.ajaxResponse(data.responseText, request.formId, function(response, success)
-							{
-								if(success) {
-									cj.setButton({status:'afterSave',disabled: false,highlight: false});
-									cj._callback('afterSave', ops.form, success)
-									if(refresh) {
-										cj.refresh();
-										cj._formInit();
-									}
-									delete cj.data[requestId]
-								}
-							})
-						},
-						error: function (err, status, e)
-						{
-							cj.setButton({status:'saveFail',disabled: false,highlight: true});
-							console.log(err, status, e);
-						}
-					})
+					cj.uploadFiles(request, request.refresh);
 				}
 			}
 		}
@@ -357,7 +333,7 @@ cj.prototype._validate.rules = {
 	}
 }
 cj.prototype._callback = function(method, subject, data) {
-	var $form = (subject.jquery) ? subject : null,
+	var $form = (typeof subject != 'undefined' && subject.jquery) ? subject : null,
 		params = ($form) ? null : subject
 	if($form) {
 		for(var selector in cj.callbacks)
@@ -532,11 +508,11 @@ cj.prototype.refresh = function(options) {
 			    data = data.replace(SCRIPT_REGEX, "")
 			}
 			for (var i = selectors.length - 1; i >= 0; i--){
-				$content = $(selectors[i], data).children()
+				$content = $(selectors[i], data)
 				if(cj.options.debug)
 					console.log($(selectors[i], data));
 				if($content.length > 0)
-					$(selectors[i]).empty().append($content)
+					$(selectors[i]).replaceWith($content)
 			}
 			cj._formInit()
 		}
@@ -595,7 +571,7 @@ cj.prototype.get = function(options, callback) {
 cj.prototype._binds = function() {
 	cj.bind('click', '[data-cj-get]', cj.handlers.get)
 	cj.bind('keyup', cj.handlers.close)
-	cj.bind('change', 'input[type="file"]:not([multiple])', cj.util.filePreview)
+	//cj.bind('change', 'input[type="file"]:not([multiple])', cj.util.filePreview)
 	cj.bind('click', '[data-cj-delete]', cj.handlers.del)
 	cj.bind('click', '[data-cj-sort-save]', cj.handlers.sortSave)
 }
@@ -635,6 +611,46 @@ cj.prototype.sort = function(selector, items, handle) {
 			else cj.flash({msg: 'You forgot to define a \'data-cj-action\' attribute on your sortable container!', error: true});
 		}
 	}).disableSelection()
+}
+cj.prototype.uploadFiles = function(request, refresh)
+{
+	// $el.ajaxStart(function(){
+	// 	//
+	// })
+	// .ajaxComplete(function(){
+	// 	//
+	// });
+	var nocache = new Date().getTime();
+
+	cj.ajaxFile.upload({
+		url: request.action+'?_='+nocache,
+		secureuri:false,
+		data: $('#'+request.formId).serializeArray(),
+		files: request.files,
+		dataType: 'text',
+		async: false,
+		complete: function (data, status)
+		{
+			cj.ajaxResponse(data.responseText, request.formId, function(response, success)
+			{
+				if(success) {
+					cj.setButton({status:'afterSave',disabled: false,highlight: false});
+					cj._callback('afterSave', ops.form, success)
+					if(refresh) {
+						cj.refresh(request.refresh);
+						cj._formInit();
+					}
+					delete cj.data[request.formId]
+				}
+			})
+		},
+		error: function (err, status, e)
+		{
+			cj.setButton({status:'saveFail',disabled: false,highlight: true});
+			console.log(err, status, e);
+		}
+	})
+	return false;
 }
 cj.prototype.ajaxFile = {
 	createUploadIframe: function(id, uri) {
@@ -811,7 +827,8 @@ cj.prototype.ajaxResponse = function(data, formId) {
 		cj.flash(flashOps)
 	}
 
-	var $notices = $('pre.cake-error, .notice, p.error, pre', response),
+	var logs = (cj.options.debug) ? 'pre.cake-error, .notice, p.error' : 'pre.cake-error, .notice, p.error, pre',
+		$notices = $(logs, response),
 		errors = '<pre>';
 
 	if($notices.length > 0) {
@@ -838,29 +855,33 @@ cj.prototype.ajaxResponse = function(data, formId) {
 }
 cj.prototype.flash = function(options)
 {
-	var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length,
-		defs = {
-			msg: 'No message supplied',
-			mask: false,
-			autoRemove: true,
-			linger: 3000,
-			html: false,
-			addClass: '',
-			replace: false,
-			modalClass: false
-		}
+	var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length;
+	var defs = {
+		msg: 'No message supplied',
+		mask: false,
+		autoRemove: true,
+		linger: 3000,
+		html: false,
+		addClass: '',
+		replace: false,
+		modalClass: false
+	}
 
 	if (typeof options == 'object')
 		ops = $.extend({}, defs, options)
-	else if (typeof options == 'string') {
+	else if (typeof options == 'string')
+	{
 		ops = defs;
 		ops.msg = options;
+	}
+	else throw new TypeError('Method \'flash\' cannot be called without arguments.')
 
-	} else throw new TypeError('Cannot invoke method \'flash\' without arguments.')
 	if(ops.replace) {
 		$('[id^="flashMessage-"].'+ops.replace).fadeOut(function(){$(this).remove()})
 	}
-	if(cj.options.debug) ops.autoRemove = false;
+
+	if(cj.options.debug)
+		ops.autoRemove = false;
 
 	if($('.flashMessageModal').length == 0) {
 		var $modal = $('<div></div>', {
@@ -870,39 +891,47 @@ cj.prototype.flash = function(options)
 			$close = $('<div></div>').addClass('modal-close').html('&times;'),
 			$mask = $('<div></div>').attr('id', 'mask'),
 			htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</[A-Z][A-Z0-9]*>', 'i')
-
 		$modal.append($close),$([$close[0],$mask[0]]).click(cj.handlers.close)
-
 		if(ops.html || htmlPattern.test( ops.msg ) )
 			$modal.html(ops.msg)
 		else
 			$modal.append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>')
+
 		if(ops.addClass) {
 			$modal.addClass(ops.addClass)
 		}
+
 		$mask.css({height: document.height+'px'});
 		$('body').append($modal)
+
 		$modal.css({maxHeight: (window.innerHeight - 50)+'px'})
+
 		$modal.fadeIn('slow', function(){ $(this).addClass('open-modal'); })
-		if(ops.mask) {
+
+		if(ops.mask)
+		{
 			$('body').append($mask)
 			$mask.fadeIn('slow')
 		}
-	} else $('.flashMessageModal').append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>')
+	}
+	else {
+		$('.flashMessageModal').append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>');
+	}
 	if (ops.autoRemove) {
 		setTimeout(function() {
 			$('#flashMessage-'+modalCount).fadeOut(function() {
+				$(this).remove();
 				if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
 					cj.close();
-				$(this).fadeOut('fast', function() {$(this).remove()})
 			});
 		}, ops.linger);
 	}
 }
-cj.prototype.close = function() {
+cj.prototype.close = function() 
+{
 	$('.flashMessageModal, #mask').each(function(){
-		$(this).fadeOut('fast',function(){$(this).remove()})
-	})
+		$(this).fadeOut('fast',function(){$(this).remove()});
+	});
 }
 cj.prototype.handlers = {
 	sortSave: function(e) {
