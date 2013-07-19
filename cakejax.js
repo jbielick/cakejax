@@ -56,7 +56,7 @@ cj.prototype.collect = function($form, validate) {
 
 	var uri = fdata.action, inputData = ''
 
-	if(uri.indexOf('/') === 0)
+	if(uri.indexOf('/') == 0)
 		uri = uri.substr(1)
 	uri = uri.split('/')
 
@@ -125,7 +125,7 @@ cj.prototype.collect = function($form, validate) {
 				else if (!/(^_)|(_$)/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
 				{
 					if(inputs[i].type == 'checkbox') {
-						fdata.data[model][field] = (inputs[i].checked) ? 1 : 0
+						fdata.data[model][field] = (inputs[i].checked) ? inputs[i].value : 0
 					}
 					else if(inputs[i].tagName == 'TEXTAREA' 
 							&& typeof window.ck != 'undefined'
