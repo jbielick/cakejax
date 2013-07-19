@@ -838,86 +838,64 @@ cj.prototype.ajaxResponse = function(data, formId) {
 }
 cj.prototype.flash = function(options)
 {
-	var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length;
-	var defs = {
-		msg: 'No message supplied',
-		mask: false,
-		autoRemove: true,
-		linger: 3000,
-		html: false,
-		addClass: '',
-		replace: false,
-		modalClass: false
-	};
+	var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length,
+		defs = {
+			msg: 'No message supplied',
+			mask: false,
+			autoRemove: true,
+			linger: 3000,
+			html: false,
+			addClass: '',
+			replace: false,
+			modalClass: false
+		}
 
 	if (typeof options == 'object')
 		ops = $.extend({}, defs, options)
-	else if (typeof options == 'string')
-	{
+	else if (typeof options == 'string') {
 		ops = defs;
 		ops.msg = options;
-	}
-	else return
-
+	} else throw new TypeError('Cannot invoke method \'flash\' without arguments.')
 	if(ops.replace) {
 		$('[id^="flashMessage-"].'+ops.replace).fadeOut(function(){$(this).remove()})
 	}
-
-	if(cj.options.debug)
-		ops.autoRemove = false;
-
-	if($('.flashMessageModal').length == 0)
-	{
-		var $modal = $('<div></div>',
-			{
+	if(cj.options.debug) ops.autoRemove = false;
+	if($('.flashMessageModal').length == 0) {
+		var $modal = $('<div></div>', {
 				'class': 'flashMessageModal',
 				id: 'flashMessageModal-'+modalCount
 			}),
 			$close = $('<div></div>').addClass('modal-close').html('&times;'),
-			$mask = $('<div></div>').attr('id', 'mask')
-
+			$mask = $('<div></div>').attr('id', 'mask'),
+			htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</[A-Z][A-Z0-9]*>', 'i')
 		$modal.append($close);
-
-		var htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</[A-Z][A-Z0-9]*>', 'i');
 		if(ops.html || htmlPattern.test( ops.msg ) )
 			$modal.html(ops.msg)
 		else
 			$modal.append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>')
-
 		if(ops.addClass) {
 			$modal.addClass(ops.addClass)
 		}
-
 		$mask.css({height: document.height+'px'});
 		$('body').append($modal)
-
 		$modal.css({maxHeight: (window.innerHeight - 50)+'px'})
-
 		$modal.fadeIn('slow', function(){ $(this).addClass('open-modal'); })
-
-		if(ops.mask)
-		{
+		if(ops.mask) {
 			$('body').append($mask)
 			$mask.fadeIn('slow')
 		}
-	}
-	else {
-		$('.flashMessageModal').append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>');
-	}
-	if (ops.autoRemove)
-	{
-		cj.removeAfter[modalCount] = setTimeout(function()
-			{
-				$('#flashMessage-'+modalCount).fadeOut(function() {
-					$(this).remove();
-					if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
-						cj.close();
-				});
-			}, ops.linger);
+	} else $('.flashMessageModal').append('<div id="flashMessage-'+modalCount+'" class="'+ops.addClass+'">'+ops.msg+'</div>')
+	if (ops.autoRemove) {
+		setTimeout(function() {
+			$('#flashMessage-'+modalCount).fadeOut(function() {
+				if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
+					cj.close();
+				$(this).fadeOut('fast', function() {$(this).remove()})
+			});
+		}, ops.linger);
 	}
 }
-cj.prototype.close = function() 
-{
+cj.prototype.close = function() {
 	$('.flashMessageModal, #mask').each(function(){
 		$(this).fadeOut('fast',function(){$(this).remove()});
 	});
