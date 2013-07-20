@@ -12,16 +12,23 @@
 *	
 *==============================================*/
 
-function cj() {
-	this.options = {
-		view: '#view'
+'use strict';
+
+function cj(options) {
+	var defaults = {
+		view: '#view',
+		removeAfter: {},
+		debug: false
 	}
-	this.data = {}
+	this.options = $.extend({}, defaults, options)
+	this.request = {}
+	this.params = {
+		here: window.location.pathname,
+		url: window.location.href
+	}
 	this.listeners = {}
-	this.options.removeAfter = {}
 	this.validates = {}
 	this.callbacks = {}
-	this.options.debug = false
 }
 
 cj.prototype.init = function() {
@@ -39,77 +46,76 @@ cj.prototype.init = function() {
 		arguments[arguments.length-1].call(this);
 }
 
-cj.prototype.collect = function($form, validate) {
-	var $el = $($form), fdata = {data: {},files: [], inputs: {}}
+cj.prototype.collect = function($form) {
+	var $el = $form, 
 		defs = {
 			refresh: false,
-		},options = $el.data('cjOptions'), ops = $.extend({}, defs, options)
+		},
+		options = $el.data('cjOptions'),
+		ops = $.extend({}, defs, options),
+		uri = $el.attr('action'),
+		_this,
+		inputData = '',
+		mcReg = /([a-z_0-9]+)+/ig,
+		habtm = /\[\]/,
+		hasMany = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
+		model = '',
+		inputs = $el[0].elements,
+		relationship,
+		saveInfo,
+		field,
+		habtmField,
+		habtmIndex,
+		r = {data: {}, files: [], inputs: {}, form: $el, url: uri, refresh: ops.refresh, live: ops.live, method: $el.attr('method')}
 
 	if(cj.options.debug)
-		console.log('Collecting: '+$el[0].id, options)
-
-	fdata.params = {}
-	fdata.formId = $el[0].id
-	fdata.action = $el.attr('action')
-	fdata.refresh = ops.refresh
-	fdata.live = ops.live
-
-	var uri = fdata.action, inputData = ''
+		console.log('Collecting: '+$el[0].id, 'Options: ', options)
 
 	if(uri.indexOf('/') === 0)
 		uri = uri.substr(1)
 	uri = uri.split('/')
 
-	fdata.params.prefix = uri[0] || ''
-	fdata.params.controller = (fdata.params.prefix) ? uri[1] : uri[0]
-	fdata.params.action = (fdata.params.prefix) ? uri[2] : uri[1]
-	if(fdata.params.action == 'add')
-		if(fdata.action.match('[0-9]+'))
-			fdata.params.belongsTo = fdata.action.match('[0-9]+')[0]
-	else if (fdata.params.action == 'edit') {
-		if(fdata.action.match('[0-9]+'))
-			fdata.params.id = fdata.action.match('[0-9]+')[0]
+	this.params.prefix = uri[0] || ''
+	this.params.controller = (this.params.prefix) ? uri[1] : uri[0]
+	this.params.action = (this.params.prefix) ? uri[2] : uri[1]
+	
+	if(/([0-9]+)$/.test(r.url)) {
+		if(this.params.action == 'add')
+			this.params.foreignKey = r.url.match(/([0-9]+)$/)[0]
+		else if (this.params.action == 'edit')
+			this.params.id = r.url.match(/([0-9]+)$/)[0]
 	}
-
-	var mcReg = /([a-z_0-9]+)+/ig,
-		habtm = /\[\]/,
-		hasMany = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
-		model = '',
-		inputs = $el[0].elements,
-		relationship
-
+	
 	for (var i = inputs.length - 1; i >= 0; i--) {
 		if(inputs[i].name && inputs[i].name.indexOf('data') > -1) {
-			saveInfo = inputs[i].name.replace('data','').match(mcReg);
-			model = saveInfo[0],
-			field = saveInfo[1],
+			saveInfo = inputs[i].name.replace('data','').match(mcReg),model = saveInfo[0],field = saveInfo[1],
 			habtmField = (typeof saveInfo[2] != 'undefined') ? saveInfo[2] : false
 			// if(cj.options.debug)
-			console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
+			//console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
 
 			if(inputs[i].type != 'file') {
-				fdata.data[model] = fdata.data[model] || {}
-				fdata.inputs[model] = fdata.inputs[model] || {}
+				r.data[model] = r.data[model] || {}
+				r.inputs[model] = r.inputs[model] || {}
 				//if name attr matches format of HABTM checkbox input ([model][model][])
 				if(hasMany.test(inputs[i].name) || model == field) {
 					relationship = 'hasMany'
 					//Create the necessary structure for an empty HABTM save
-					if(!(model in fdata.data[model]))
-						 fdata.data[model][model] = ''
+					if(!(model in r.data[model]))
+						 r.data[model][model] = ''
 					//if a checkbox is found*
 					if(inputs[i].type == 'checkbox' && inputs[i].checked || inputs[i].type == 'select-multiple' && inputs[i].value
 						|| inputs[i].type == 'hidden' && inputs[i].value != '') {
 						//turn the empty string into an array*
-						if(typeof fdata.data[model][model] != 'object') {
-							fdata.data[model][model] = []
-							fdata.inputs[model][model] = []
+						if(typeof r.data[model][model] != 'object') {
+							r.data[model][model] = []
+							r.inputs[model][model] = []
 						}
 						//and add the ID of that HABTM record
 						if(inputs[i].type == 'select-multiple' && typeof $(inputs[i]).val() == 'object') {
-							fdata.data[model][model] = $(inputs[i]).val()
+							r.data[model][model] = $(inputs[i]).val()
 						} else {
-							fdata.data[model][model].push(inputs[i].value)
-							fdata.inputs[model][model].push(inputs[i])
+							r.data[model][model].push(inputs[i].value)
+							r.inputs[model][model].push(inputs[i])
 						}
 					}
 				}
@@ -117,34 +123,33 @@ cj.prototype.collect = function($form, validate) {
 				{
 					relationship = 'habtm'
 					var habtmIndex = inputs[i].name.match(/\[[0-9]+\]/i)[0].match(/[0-9]+/)[0]
-					fdata.data[model][habtmIndex] = fdata.data[model][habtmIndex] || {}
-					fdata.data[model][habtmIndex][habtmField] = inputs[i].value
-					fdata.inputs[model][habtmIndex] = fdata.data[model][habtmIndex] || {}
-					fdata.inputs[model][habtmIndex][habtmField] = inputs[i]
+					r.data[model][habtmIndex] = r.data[model][habtmIndex] || {}
+					r.data[model][habtmIndex][habtmField] = inputs[i].value
+					r.inputs[model][habtmIndex] = r.data[model][habtmIndex] || {}
+					r.inputs[model][habtmIndex][habtmField] = inputs[i]
 				}
 				else if (!/(^_)|(_$)/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
 				{
 					if(inputs[i].type == 'checkbox') {
-						fdata.data[model][field] = (inputs[i].checked) ? 1 : 0
+						r.data[model][field] = (inputs[i].checked) ? 1 : 0
 					}
 					else if(inputs[i].tagName == 'TEXTAREA' 
 							&& typeof window.ck != 'undefined'
 							&& typeof window.ck[inputs[i].id] != 'undefined') //special handling for CKEDITOR instances
-						fdata.data[model][field] = window.ck[inputs[i].id] //we stored the CKeditor data here on an interval
+						r.data[model][field] = window.ck[inputs[i].id] //we stored the CKeditor data here on an interval
 					else {
-						fdata.data[model][field] = inputs[i].value
+						r.data[model][field] = inputs[i].value
 						if(field == 'id') {
-							fdata._origin = {
+							r._origin = {
 								name: 'data['+model+'][id]',
 								value: inputs[i].value
 							}
 						}
 					}
-					fdata.inputs[model][field] = inputs[i]
+					r.inputs[model][field] = inputs[i]
 					//disclaimer: I've not done much testing with multiple select/radio buttons/multiple file input.
 				}
-			}
-			else if (inputs[i].type == 'file' && inputs[i].value != '') {
+			} else if (inputs[i].type == 'file' && inputs[i].value != '') {
 				//if action is add, the id in the URI may be the file's foreign (belongsTo) entry,
 				// not the file's ID itself.
 				//throw the files inputs' ids in the files array and it'll be ajax transported on save.
@@ -152,118 +157,104 @@ cj.prototype.collect = function($form, validate) {
 				// 	console.log(inputs[i].files[z]);
 				// }
 				
-				fdata.inputs[model] = fdata.inputs[model] || {}
+				r.inputs[model] = r.inputs[model] || {}
 				if(hasMany.test(inputs[i].name)) {
-					fdata.inputs[model] = fdata.inputs[model] || []
-					fdata.inputs[model].push({})
-					fdata.inputs[model][fdata.inputs[model].length-1][field] = inputs[i]
+					r.inputs[model] = r.inputs[model] || []
+					r.inputs[model].push({})
+					r.inputs[model][r.inputs[model].length-1][field] = inputs[i]
 				} else {
-					fdata.inputs[model][field] = inputs[i]
+					r.inputs[model][field] = inputs[i]
 				}
-				fdata.files.push({fileElementId: inputs[i].id})
+				r.files.push(inputs[i].id)
 			}
-			$el.data('cj-data', fdata)
-			cj.data[fdata.formId] = fdata
 		}
 	}
+	$el.data('cj-data', r)
+	this.request = r
+	
 	if(cj.options.debug)
-		console.log(fdata.data)//JSON.stringify(fdata.data, null, '\t'));
-
-	if(fdata.live) {
-		return cj.save({form:$form})
+		console.log(r.data)//JSON.stringify(r.data, null, '\t'));
+	
+	if(r.live) {
+		return cj.save()
 	}
-	return fdata
+	
+	return r
 }
-cj.prototype.save = function(ops) {
+cj.prototype.save = function(options) {
 	
-	var defs = { requests: false }, data = {}, refresh, model, field, request, requests, requestId
+	var defs = {},
+		ops = $.extend({}, defs, options)
+	
+	if(!$.isEmptyObject(this.request.data)) {
+		if(cj.options.debug)
+			console.log(this.request)
+			
+		if(this.request.form) {
+			
+			if(!cj._validate(this.request))
+				return false
 
-	ops = $.extend({}, defs, ops)
-
-	if(ops.requests) {
-		ops.requests = ops.requests.toString().split(',')
-		for (var i=0; i < ops.requests.length; i++) {
-			if(ops.requests[i])
-				data[ops.requests[i]] = cj.data[ops.requests[i]]
+			if(!cj._callback('beforeValidate', this.request))
+				return false
 		}
-	} else {
-		data = cj.data
-	}
-	
-	if(objectSize(data) > 0) {
-		for (requestId in data) {
-			if( data.hasOwnProperty( requestId ) ) {
-				if(cj.options.debug)
-					console.log(data[requestId])
-					
-				if(ops.form) {
-					if(!cj._callback('beforeValidate', $(ops.form)))
-						return false
+		
+		if(!cj._callback('beforeSave', this.request))
+			return false
 
-					if(!cj._validate(data[requestId]))
-						return false
+		cj.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
 
-					if(!cj._callback('beforeSave', $(ops.form)))
-						return false
-				}
-				
-				cj.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
-				
-				request = data[requestId];
+		cj.setButton({status:'duringSave', disabled: true, scope: this.request.form});
 
-				cj.setButton({status:'duringSave', disabled: true, scope: $(ops.form)});
-
-				if(!request.files || request.files && request.files.length == 0) {
-					$.ajax({
-						url: request.action,
-						type: 'POST',
-						dataType: 'text',
-						data: request.data,
-						cache: false,
-						success: function(data)
-						{
-							cj.ajaxResponse(data, requestId, function(response, success) {
-								if(success) {
-									cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: $('#'+requestId)})
-									if(ops.form)
-										cj._callback('afterSave', ops.form, request.data)
-									delete cj.data[requestId]
-								}
-								if(success && request.refresh)
-									cj.refresh(request.refresh)
-							})
-						},
-						error: function(e, xhr, ms) {
-							console.log(e)
-							cj.setButton({status:'saveFail', disabled: false, scope: $('#'+formId)})
-							if(e.status == 403) {
-								cj.flash({
-									msg: 'Please login to continue.',
-									html: true,
-									autoRemove: false
-								})
-								$('<div></div>').load('/login', null, function(page)
-								{
-									$('.flashMessageModal').append($(this))
-									$('.flashMessageModal form').addClass('cj')
-									cj._formInit()
-								})
-								return false
-							}
-							else cj.flash({msg: ms+e.responseText, html: true, autoRemove: false})
+		if(!this.request.files || this.request.files && this.request.files.length == 0) {
+			$.ajax({
+				url: this.request.url,
+				type: this.request.method || 'POST',
+				dataType: 'text',
+				data: this.request.data,
+				cache: false,
+				success: function(data)
+				{
+					cj.ajaxResponse(data, function(response, success) {
+						if(success) {
+							cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: this.request.form})
+							if(ops.form)
+								cj._callback('afterSave', this.request)
+							delete cj.request.data
 						}
+						if(success && this.request.refresh)
+							cj.refresh(this.request.refresh)
 					})
+				},
+				error: function(e, xhr, ms) {
+					console.log(e)
+					cj.setButton({status:'saveFail', disabled: false, scope: $('#'+formId)})
+					if(e.status == 403) {
+						cj.flash({
+							msg: 'Please login to continue.',
+							html: true,
+							autoRemove: false
+						})
+						$('<div></div>').load('/login', null, function(page)
+						{
+							$('.flashMessageModal').append($(this))
+							$('.flashMessageModal form').addClass('cj')
+							cj._formInit()
+						})
+						return false
+					}
+					else cj.flash({msg: ms+e.responseText, html: true, autoRemove: false})
 				}
-				else if(request.files && request.files.length > 0) {
-					cj.uploadFiles(request, request.refresh);
-				}
-			}
+			})
+		}
+		else if(this.request.files && this.request.files.length > 0) {
+			cj.uploadFiles(this.request);
 		}
 	}
 	else
 		cj.flash('No changes to save!')
 }
-cj.prototype._validate = function(params) {
+cj.prototype._validate = function(request) {
 	if(cj.options.debug)
 		console.log('Validating...')
 	var model,field,input,value,ruleGroup,rule,msgs = [],msg
@@ -271,13 +262,13 @@ cj.prototype._validate = function(params) {
 	$('.verror').removeClass('verror')
 	for(model in cj.validate)
 		if(cj.validate.hasOwnProperty(model))
-			if(model in params.data)
+			if(model in request.data)
 				for(field in cj.validate[model])
-					if(cj.validate[model].hasOwnProperty(field) && field in params.data[model])
+					if(cj.validate[model].hasOwnProperty(field) && field in request.data[model])
 						for(ruleGroup in cj.validate[model][field])
 							if(cj.validate[model][field].hasOwnProperty(ruleGroup)) {
-								input = params.inputs[model][field]
-								value = params.data[model][field]
+								input = request.inputs[model][field]
+								value = request.data[model][field]
 								rg = cj.validate[model][field][ruleGroup]
 								if (typeof rg.rule == 'function') {
 									if(rg.rule(value) === false)
@@ -332,19 +323,18 @@ cj.prototype._validate.rules = {
 		return r.test(i)
 	}
 }
-cj.prototype._callback = function(method, subject, data) {
-	var $form = (typeof subject != 'undefined' && subject.jquery) ? subject : null,
-		params = ($form) ? null : subject
-	if($form) {
+cj.prototype._callback = function(method, form) {
+	var form = (typeof $form == 'undefined') ? this.request.form : $(form)
+	if(form) {
 		for(var selector in cj.callbacks)
-			if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
-				if(cj.callbacks[selector][method].call(this, $form, (typeof data != 'undefined') ? data : null) === false)
+			if(cj.callbacks.hasOwnProperty(selector) && form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
+				if(cj.callbacks[selector][method].call(this, this.request, (typeof data != 'undefined') ? data : null) === false)
 					return false
 		return true
-	} else if (params) {
+	} else {
 		for(var model in cj.callbacks)
-			if(cj.callbacks.hasOwnProperty(model) && model.toLowerCase() == params.controller.substr(0,params.controller.length-1) && ( method in cj.callbacks[model]))
-				if(cj.callbacks[model][method].call(this, params) === false)
+			if(cj.callbacks.hasOwnProperty(model) && model.toLowerCase() == this.params.controller.substr(0,this.params.controller.length-1) && ( method in cj.callbacks[model]))
+				if(cj.callbacks[model][method].call(this, this.params) === false)
 					return false
 		return true
 	}
@@ -414,7 +404,7 @@ cj.prototype._formInit = function(form) {
 	if(!cj.timers)
 		cj.timers = {};
 
-	var $forms = $('form.cakejax')
+	var $forms = $('form')
 
 	$forms.each(function(index) {
 		if(!$(this).data('cj-data') || $(this).data('cj-data') == false) {
@@ -425,21 +415,11 @@ cj.prototype._formInit = function(form) {
 			var $el = $(this), formId = $el.attr('id')
 
 				$el
-				.data('cj-data', {formId: formId || 'Form'})
+				.data('cj-data', cj.collect($el).data)
 				.on('submit', function(e) {
-					e.preventDefault()
-					
-					var trigger = $(this).data('cj-trigger'),
-						$form = $(this),
-						ops = {form: $form}
-
-					window.prompted = true
-					
-					if($form.hasClass('temporary'))
-						ops.refresh = true
-
-					cj.collect($form)
-					cj.save(ops)
+					cj.collect($el)
+					cj.save()
+					return false
 			})
 
 			cj.setButton({status: 'beforeChange', disabled: false, scope: $el})
@@ -472,7 +452,8 @@ cj.prototype.setButton = function(options) {
 				saveFail: {text: 'Retry Save',addClass: 'cj-failed'}
 			}
 		},
-		text,el,ops = $.extend({}, defs, options)
+		text,el,ops = $.extend({}, defs, options),
+		classToAdd
 
 	var $el = $('[onclick^="cj.save"], [type="submit"]', ops.scope)
 
@@ -612,7 +593,7 @@ cj.prototype.sort = function(selector, items, handle) {
 		}
 	}).disableSelection()
 }
-cj.prototype.uploadFiles = function(request, refresh)
+cj.prototype.uploadFiles = function(request)
 {
 	// $el.ajaxStart(function(){
 	// 	//
@@ -623,24 +604,24 @@ cj.prototype.uploadFiles = function(request, refresh)
 	var nocache = new Date().getTime();
 
 	cj.ajaxFile.upload({
-		url: request.action+'?_='+nocache,
+		url: request.url+'?_='+nocache,
 		secureuri:false,
-		data: $('#'+request.formId).serializeArray(),
+		data: request.form.serializeArray(),
 		files: request.files,
 		dataType: 'text',
 		async: false,
 		complete: function (data, status)
 		{
-			cj.ajaxResponse(data.responseText, request.formId, function(response, success)
+			cj.ajaxResponse(data.responseText, function(response, success)
 			{
 				if(success) {
 					cj.setButton({status:'afterSave',disabled: false,highlight: false});
-					cj._callback('afterSave', ops.form, success)
+					cj._callback('afterSave', request, success)
 					if(refresh) {
 						cj.refresh(request.refresh);
 						cj._formInit();
 					}
-					delete cj.data[request.formId]
+					delete cj.request.data
 				}
 			})
 		},
@@ -804,9 +785,10 @@ cj.prototype.ajaxFile = {
 		(s.context ? $(s.context) : $.event).trigger( "ajaxError", [xhr, s, e] )
 	}
 },
-cj.prototype.ajaxResponse = function(data, formId) {
-	var theFormId = (typeof formId == 'undefined') ? false : formId,
-		response, flashMessage = undefined, success = true, stop = false
+cj.prototype.ajaxResponse = function(data) {
+	var formId = this.request.form[0].id,
+		response, flashMessage = undefined, success = true, stop = false,
+		$freshForm
 
 	if(typeof data == 'object') {
 		response = data.responseText
@@ -844,8 +826,8 @@ cj.prototype.ajaxResponse = function(data, formId) {
 	if(flashMessage.toString().indexOf('could not be') > -1)
 		success = false
 
-	if(theFormId) {
-		$freshForm = $('#'+theFormId, response)
+	if(formId) {
+		$freshForm = $('#'+formId, response)
 		if($freshForm.length > 0)
 			cj.resetForm($freshForm.addClass('cj-replaced'))
 	}
@@ -857,15 +839,16 @@ cj.prototype.flash = function(options)
 {
 	var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length;
 	var defs = {
-		msg: 'No message supplied',
-		mask: false,
-		autoRemove: true,
-		linger: 3000,
-		html: false,
-		addClass: '',
-		replace: false,
-		modalClass: false
-	}
+			msg: 'No message supplied',
+			mask: false,
+			autoRemove: true,
+			linger: 3000,
+			html: false,
+			addClass: '',
+			replace: false,
+			modalClass: false
+		},
+		ops
 
 	if (typeof options == 'object')
 		ops = $.extend({}, defs, options)
