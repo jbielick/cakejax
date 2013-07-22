@@ -1,6 +1,6 @@
 /**==============================================
-*	CakeJax v0.5.5 BETA
-*	7/21/2013
+*	CakeJax v0.5.3 BETA
+*	6/18/2013
 *	 
 *	 ___ ___    _   ___ __  __ ___ _  _ _____
 *	| __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -16,7 +16,7 @@
 
 function cj(options) {
 	this.options = {
-		view: '#view',
+		view: '#content',
 		removeAfter: {},
 		debug: false,
 		enable: 'form'
@@ -51,7 +51,7 @@ cj.prototype.init = function(options) {
 cj.prototype.collect = function($form) {
 	var $el = $form, 
 		defs = {
-			refresh: false,
+			refresh: true,
 		},
 		options = $el.data('cjOptions'),
 		ops = $.extend({}, defs, options),
@@ -220,12 +220,11 @@ cj.prototype.save = function(options) {
 					cj.ajaxResponse(data, function(response, success) {
 						if(success) {
 							cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: this.request.form})
-							console.log(this.request)
 							cj._callback('afterSave', this.request)
 							// delete cj.request.data
 						}
 						if(success && this.request.refresh)
-							cj.refresh(this.request.refresh)
+							$(cj.options.view).replaceWith($(cj.options.view, data))
 					})
 				},
 				error: function(e, xhr, ms) {
@@ -255,7 +254,15 @@ cj.prototype.save = function(options) {
 				files: this.request.files,
 				data: this.request.form.serializeArray(),
 				success: function(data) {
-					cj.ajaxResponse(data, this.request)
+					cj.ajaxResponse(data, function(response, success) {
+						if(success) {
+							cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: this.request.form})
+							cj._callback('afterSave', this.request)
+							// delete cj.request.data
+						}
+						if(success && this.request.refresh)
+							$(cj.options.view).replaceWith($(cj.options.view, data))
+					})
 				},
 				error: function(e, xhr, er, error) {
 					console.log(e, xhr, er, error)
@@ -497,7 +504,7 @@ cj.prototype.setButton = function(options) {
 }
 cj.prototype.refresh = function(options) {
 	var defs = {
-		selector: '#view',
+		selector: cj.options.view,
 		url: window.location.pathname
 	}, ops = $.extend({}, defs, options)
 	
@@ -517,7 +524,7 @@ cj.prototype.refresh = function(options) {
 			for (var i = selectors.length - 1; i >= 0; i--){
 				$content = $(selectors[i], data)
 				if(cj.options.debug)
-					console.log($(selectors[i], data))
+					console.log($content)
 				if($content.length > 0)
 					$(selectors[i]).replaceWith($content)
 			}
