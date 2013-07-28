@@ -1,21 +1,21 @@
 /**==============================================
-*	CakeJax v0.5.3 BETA
-*	6/18/2013
-*	 
-*	 ___ ___    _   ___ __  __ ___ _  _ _____
-*	| __| _ \  /_\ / __|  \/  | __| \| |_   _|
-*	| _||   / / _ \ (_ | |\/| | _|| .` | | |
-*	|_| |_|_\/_/ \_\___|_|  |_|___|_|\_| |_|
-*							FRAGMENTLABS.COM
-*	
-*	Author: Josh Bielick
-*	
+* CakeJax v0.6.3 BETA
+* 6/18/2013
+*
+*  ___ ___    _   ___ __  __ ___ _  _ _____
+* | __| _ \  /_\ / __|  \/  | __| \| |_   _|
+* | _||   / / _ \ (_ | |\/| | _|| .` | | |
+* |_| |_|_\/_/ \_\___|_|  |_|___|_|\_| |_|
+*     FRAGMENTLABS.COM
+*
+* Author: Josh Bielick
+*
 *==============================================*/
 
 'use strict';
 
 function cj(options) {
-	this.options = {
+	this.options = {	
 		view: '#content',
 		removeAfter: {},
 		debug: false,
@@ -37,78 +37,71 @@ cj.prototype.init = function(options) {
 
 	this.options = this.options = $.extend({}, this.options, options)
 
-	if(typeof CKEDITOR != 'undefined') {
+	if(typeof CKEDITOR !== 'undefined') {
 		try{CKEDITOR.replaceAll()}catch(e){/*don't care*/}
 	}
 
 	cj._binds()
 	cj._formInit()
 
-	if(typeof arguments[arguments.length-1] == 'function')
+	if(typeof arguments[arguments.length-1] === 'function')
 		arguments[arguments.length-1].call(this);
 }
 
 cj.prototype.collect = function($form) {
-	var $el = $form, 
-		defs = {
+	var defs = {
 			refresh: true,
 		},
-		options = $el.data('cjOptions'),
+		options = $form.data('cjOptions'),
 		ops = $.extend({}, defs, options),
-		uri = $el.attr('action'),
-		_this,
+		uri = $form[0].action,
 		inputData = '',
 		mcReg = /([a-z_0-9]+)+/ig,
-		habtm = /\[\]/,
-		hasMany = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
+		habtmReg = /\[\]/,
+		oneToManyReg = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
 		model = '',
-		inputs = $el[0].elements,
-		relationship,
-		saveInfo,
-		field,
-		habtmField,
-		habtmIndex,
-		r = {data: {}, files: [], inputs: {}, form: $el, url: uri, refresh: ops.refresh, live: ops.live, method: $el.attr('method')}
+		controller,
+		inputs = $form[0].elements,
+		_this,relationship,params,field,belongsToField,habtmIndex,
+		r = {data: {}, files: [], inputs: {}, form: $form, url: uri, refresh: ops.refresh, live: ops.live, method: $form.attr('method'), params: {}}
 
 	if(cj.options.debug)
-		console.log('Collecting: '+$el[0].id, 'Options: ', options)
+		console.log('Collecting: #'+$form[0].id, 'Options: ', options)
 
 	if(uri.indexOf('/') === 0)
 		uri = uri.substr(1)
 	uri = uri.split('/')
-
-	this.params.prefix = uri[0] || ''
-	this.params.controller = (this.params.prefix) ? uri[1] : uri[0]
-	this.params.action = (this.params.prefix) ? uri[2] : uri[1]
-	
-	if(/([0-9]+)$/.test(r.url)) {
-		if(this.params.action == 'add')
-			this.params.foreignKey = r.url.match(/([0-9]+)$/)[0]
-		else if (this.params.action == 'edit')
-			this.params.id = r.url.match(/([0-9]+)$/)[0]
-	}
 	
 	for (var i = inputs.length - 1; i >= 0; i--) {
 		if(inputs[i].name && inputs[i].name.indexOf('data') > -1) {
-			saveInfo = inputs[i].name.replace('data','').match(mcReg),model = saveInfo[0],field = saveInfo[1],
-			habtmField = (typeof saveInfo[2] != 'undefined') ? saveInfo[2] : false
+			params = inputs[i].name.replace('data','').match(mcReg)
+			model = params[0]
+			field = params[1]
+			if(params.length > 2)
+				belongsToField = (params.length > 2) ? params[2] : false
+
 			// if(cj.options.debug)
 			//console.log({name: inputs[i].name, value: inputs[i].value, type: inputs[i].type});
 
-			if(inputs[i].type != 'file') {
+			//controler is inferred from RegExp matching the form's model name to uri segments
+			controller = uri.filter(function(v) {return new RegExp('^'+model.toLowerCase().substring(0, Math.round(model.length*0.75))).test(v.toLowerCase())})
+			r.params.controller = (uri.length) ? controller[0] : null
+
+			r.params.model = r.params.model || model
+
+			if(inputs[i].type !== 'file') {
 				r.data[model] = r.data[model] || {}
 				r.inputs[model] = r.inputs[model] || {}
 				//if name attr matches format of HABTM checkbox input ([model][model][])
-				if(hasMany.test(inputs[i].name) || model == field) {
-					relationship = 'hasMany'
+				if(oneToManyReg.test(inputs[i].name) || model == field) 
+				{
 					//Create the necessary structure for an empty HABTM save
 					if(!(model in r.data[model]))
 						 r.data[model][model] = ''
 					//if a checkbox is found*
-					if(inputs[i].type == 'checkbox' && inputs[i].checked || inputs[i].type == 'select-multiple' && inputs[i].value
-						|| inputs[i].type == 'hidden' && inputs[i].value != '') {
+					if( inputs[i].type == 'checkbox' && inputs[i].checked || inputs[i].type == 'select-multiple' && inputs[i].value|| inputs[i].type == 'hidden' && inputs[i].value != '') {
 						//turn the empty string into an array*
-						if(typeof r.data[model][model] != 'object') {
+						if(typeof r.data[model][model] !== 'object') {
 							r.data[model][model] = []
 							r.inputs[model][model] = []
 						}
@@ -121,14 +114,13 @@ cj.prototype.collect = function($form) {
 						}
 					}
 				}
-				else if (habtm.test(inputs[i].name) && habtmField)  // HABTM with number indices 
+				else if (habtmReg.test(inputs[i].name) && belongsTo)  // HABTM with number indices 
 				{
-					relationship = 'habtm'
-					var habtmIndex = inputs[i].name.match(/\[[0-9]+\]/i)[0].match(/[0-9]+/)[0]
+					habtmIndex = inputs[i].name.match(/\[[0-9]+\]/i)[0].match(/[0-9]+/)[0]
 					r.data[model][habtmIndex] = r.data[model][habtmIndex] || {}
-					r.data[model][habtmIndex][habtmField] = inputs[i].value
+					r.data[model][habtmIndex][belongsTo] = inputs[i].value
 					r.inputs[model][habtmIndex] = r.data[model][habtmIndex] || {}
-					r.inputs[model][habtmIndex][habtmField] = inputs[i]
+					r.inputs[model][habtmIndex][belongsTo] = inputs[i]
 				}
 				else if (!/(^_)|(_$)/.test(inputs[i].id))	//normal input field, add struct of data.model.field: 'value'
 				{
@@ -136,8 +128,8 @@ cj.prototype.collect = function($form) {
 						r.data[model][field] = (inputs[i].checked) ? 1 : 0
 					}
 					else if(inputs[i].tagName == 'TEXTAREA' 
-							&& typeof window.ck != 'undefined'
-							&& typeof window.ck[inputs[i].id] != 'undefined') //special handling for CKEDITOR instances
+							&& typeof window.ck !== 'undefined'
+							&& typeof window.ck[inputs[i].id] !== 'undefined') //special handling for CKEDITOR instances
 						r.data[model][field] = window.ck[inputs[i].id] //we stored the CKeditor data here on an interval
 					else {
 						r.data[model][field] = inputs[i].value
@@ -152,13 +144,6 @@ cj.prototype.collect = function($form) {
 					//disclaimer: I've not done much testing with multiple select/radio buttons/multiple file input.
 				}
 			} else if (inputs[i].type == 'file' && inputs[i].value != '') {
-				//if action is add, the id in the URI may be the file's foreign (belongsTo) entry,
-				// not the file's ID itself.
-				//throw the files inputs' ids in the files array and it'll be ajax transported on save.
-				// for (var z = inputs[i].files.length - 1; z >= 0; z--){
-				// 	console.log(inputs[i].files[z]);
-				// }
-				
 				r.inputs[model] = r.inputs[model] || {}
 				if(hasMany.test(inputs[i].name)) {
 					r.inputs[model] = r.inputs[model] || []
@@ -171,65 +156,61 @@ cj.prototype.collect = function($form) {
 			}
 		}
 	}
-	$el.data('cj-data', r)
+	$form.data('cjRequestData', r)
 	this.request = r
 	
 	if(cj.options.debug)
-		console.log(r.data)//JSON.stringify(r.data, null, '\t'));
+		console.log('#'+r.form.attr('id')+' Request:', r)//JSON.stringify(r.data, null, '\t'));
 	
 	if(r.live) {
-		return cj.save()
+		return cj.save(r)
 	}
-	
 	return r
 }
-cj.prototype.save = function(options) {
+cj.prototype.save = function(request) {
 	
-	var defs = {},
-		ops = $.extend({}, defs, options)
-	
-	if(!$.isEmptyObject(this.request.data)) {
+	if(!$.isEmptyObject(request.data)) {
 		if(cj.options.debug)
-			console.log('Saving...', this.request)
+			console.log('Saving...', request)
 			
-		if(this.request.form) {
+		if(request.form) {
 			
-			if(!cj._callback('beforeValidate', this.request))
+			if(!cj._callback('beforeValidate', request))
 				return false
 			
-			if(!cj._validate(this.request))
+			if(!cj._validate(request))
 				return false
 		}
 		
-		if(!cj._callback('beforeSave', this.request))
+		if(!cj._callback('beforeSave', request))
 			return false
 
 		cj.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
 
-		cj.setButton({status:'duringSave', disabled: true, scope: this.request.form});
+		cj.setButton({status:'duringSave', disabled: true, scope: request.form});
 
-		if(!this.request.files || this.request.files && this.request.files.length == 0) {
+		if(!request.files || request.files && request.files.length == 0) {
 			$.ajax({
-				url: this.request.url,
-				type: this.request.method || 'POST',
+				url: request.url,
+				type: request.method || 'POST',
 				dataType: 'text',
-				data: this.request.data,
+				data: request.data,
 				cache: false,
 				success: function(data)
 				{
 					cj.ajaxResponse(data, function(response, success) {
 						if(success) {
-							cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: this.request.form})
-							cj._callback('afterSave', this.request)
+							cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
+							cj._callback('afterSave', request)
 							// delete cj.request.data
 						}
-						if(success && this.request.refresh)
+						if(success && request.refresh)
 							$(cj.options.view).replaceWith($(cj.options.view, data))
 					})
 				},
 				error: function(e, xhr, ms) {
 					console.log(e)
-					cj.setButton({status:'saveFail', disabled: false, scope: this.request.form})
+					cj.setButton({status:'saveFail', disabled: false, scope: request.form})
 					if(e.status == 403) {
 						cj.flash({
 							msg: 'Please login to continue.',
@@ -244,23 +225,23 @@ cj.prototype.save = function(options) {
 						})
 						return false
 					}
-					else cj.flash({msg: ms+e.responseText, html: true, autoRemove: false})
+					else cj.flash({msg: ms+xhr.responseText, html: true, autoRemove: false})
 				}
 			})
 		}
-		else if(this.request.files && this.request.files.length > 0) {
+		else if(request.files && request.files.length > 0) {
 			cj.transport.send({
-				url: this.request.url,
-				files: this.request.files,
-				data: this.request.form.serializeArray(),
+				url: request.url,
+				files: request.files,
+				data: request.form.serializeArray(),
 				success: function(data) {
 					cj.ajaxResponse(data, function(response, success) {
 						if(success) {
-							cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: this.request.form})
-							cj._callback('afterSave', this.request)
+							cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
+							cj._callback('afterSave', request)
 							// delete cj.request.data
 						}
-						if(success && this.request.refresh)
+						if(success && request.refresh)
 							$(cj.options.view).replaceWith($(cj.options.view, data))
 					})
 				},
@@ -269,9 +250,10 @@ cj.prototype.save = function(options) {
 				}
 			});
 		}
+		return true
 	}
 	else
-		cj.flash('No changes to save!')
+		return cj.flash('No changes to save!')
 }
 cj.prototype._validate = function(request) {
 	if(cj.options.debug)
@@ -289,13 +271,13 @@ cj.prototype._validate = function(request) {
 								input = request.inputs[model][field]
 								value = request.data[model][field]
 								rg = cj.validate[model][field][ruleGroup]
-								if (typeof rg.rule == 'function') {
+								if (typeof rg.rule === 'function') {
 									if(rg.rule(value) === false)
 										msgs.push({input:input,message:rg.message})
 								} else {
 									rg.rule = rg.rule.toString().split(',')
 									for (var i=0; i < rg.rule.length; i++) {
-										if(rg.rule[i] in cj._validate.rules && rg.rule[i] != 'match') {
+										if(rg.rule[i] in cj._validate.rules && rg.rule[i] !== 'match') {
 											if(cj._validate.rules[rg.rule[i]](value) === false) {
 												msgs.push({input:input,message: (typeof rg.message == 'string') ? rg.message : rg.message[i]})
 											}
@@ -347,7 +329,7 @@ cj.prototype._callback = function(method, form) {
 	try{
 		if(form) {
 			for(var selector in cj.callbacks)
-				if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] == 'function' )
+				if(cj.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] === 'function' )
 					if(cj.callbacks[selector][method].call(this, this.request) === false)
 						return false
 		}
@@ -375,9 +357,9 @@ cj.prototype.del = function(params) {
 
 	this.params = params
 	
-	if(typeof params.controller != 'undefined' && typeof params.id != 'undefined')
+	if(typeof params.controller !== 'undefined' && typeof params.id !== 'undefined')
 	{
-		var prefix = (typeof this.params.prefix != 'undefined') ? '/'+this.params.prefix : ''
+		var prefix = (typeof this.params.prefix !== 'undefined') ? '/'+this.params.prefix : ''
 		
 		this.request.url = prefix+'/'+this.params.controller+'/delete/'+this.params.id
 		this.request.data = {}
@@ -417,8 +399,8 @@ cj.prototype.del = function(params) {
 	}
 }
 cj.prototype._formInit = function(form) {
-	$(document).off('change keyup input', 'input, textarea, select, radio, checkbox')
-	if(typeof CKEDITOR != 'undefined' && CKEDITOR.instances )
+	$(document).off('change keyup input', 'input, textarea, select, radio, checkbox', cj.handlers.change)
+	if(typeof CKEDITOR !== 'undefined' && CKEDITOR.instances )
 	{
 		var eds = CKEDITOR.instances;
 		for(var i in eds)
@@ -426,7 +408,7 @@ cj.prototype._formInit = function(form) {
 				cj.ck = {}
 				cj.ck[i] = eds[i].getData()
 				var CKinterval = setInterval(function() {
-					if(cj.ck[i] != eds[i].getData()) {
+					if(cj.ck[i] !== eds[i].getData()) {
 						cj.ck[i] = eds[i].getData()
 						$(eds[i].element.$).trigger('change')
 					}
@@ -437,40 +419,25 @@ cj.prototype._formInit = function(form) {
 	if(!cj.timers)
 		cj.timers = {};
 
-	var $forms = $(cj.options.enable)
+	var $forms = $(cj.options.enable), $form
 
 	$forms.each(function(index) {
 		if(!$(this).data('cj-data') || $(this).data('cj-data') == false) {
 			
 			if(cj.options.debug)
 				console.log('\t\tNow Listening To: '+$(this).attr('id'));
-
-			var $el = $(this), formId = $el.attr('id')
-
-				$el
-				.data('cj-data', cj.collect($el).data)
+			$form = $(this)
+			$form
+				.data('cakejax', true)
 				.on('submit', function(e) {
-					cj.collect($el)
-					cj.save()
+					cj.save(cj.collect($(this)))
 					return false
-			})
-
-			cj.setButton({status: 'beforeChange', disabled: false, scope: $el})
-			cj._callback('init', $el)
+				})
+			cj.setButton({status: 'beforeChange', disabled: false, scope: $form})
+			cj._callback('init', $form)
 		}
 	});
-	$(document).on('change keyup input', 'input, textarea, select, radio, checkbox', function(e) {
-		var $form = $(e.target.form), formId = e.target.form.id
-		if(e.type == 'input' || e.type == 'keyup') {
-			clearTimeout(cj.collectTimeout)
-			cj.collectTimeout = setTimeout(function() {
-					cj.collect($form)
-				}, 400)
-		} else {
-			cj.collect($form)
-		}
-		cj.setButton({status: 'beforeSave', disabled: false, scope: $form})
-	});
+	$(document).on('change keyup input', 'input, textarea, select, radio, checkbox', cj.handlers.change);
 }
 cj.prototype.setButton = function(options) {
 	var defs = {
@@ -558,7 +525,7 @@ cj.prototype.get = function(options, callback) {
 
 			cj._formInit()
 
-			if(typeof arguments[arguments.length-1] == 'function')
+			if(typeof arguments[arguments.length-1] === 'function')
 				arguments[arguments.length-1].call(this, $content);
 		},
 		error: function(xhr, e, msg) {
@@ -581,9 +548,9 @@ cj.prototype.bind = function(e, el, callback) {
 	// 	var ui = callback.name || el
 	// if(!cj.listeners[e+':'+ui]) {
 	// 	cj.listeners[e+':'+ui] = true
-		if(typeof el == 'function') {
+		if(typeof el === 'function') {
 			$(document).on(e, el)
-		} else if(typeof callback == 'function') {
+		} else if(typeof callback === 'function') {
 			$(document).on(e, el, callback)
 		}
 	// }
@@ -612,7 +579,6 @@ cj.prototype.sort = function(selector, items, handle) {
 	}).disableSelection()
 }
 cj.prototype.transport = {
-	frame: null,
 	buildIframe: function(id, uri) {
 		var id = 'cjTransportFrame-'+id,
 			$iframe = $('<iframe id="'+id+'" name="'+id+'" style="position:absolute; top:-9999px; left:-9999px" />')
@@ -626,20 +592,26 @@ cj.prototype.transport = {
 		}
 		return $iframe
 	},
-	buildForm: function(id, files, data) {
-		var formId = 'cjTransportForm-'+id,
-			$form = $('<form action="" method="POST" id="' + formId + '" enctype="multipart/form-data"></form>'),
-			$newEl
-		if(data) {
-			for(var input in data) {
-				if(data.hasOwnProperty(input))
-					$('<input type="hidden" name="' + data[input]['name'] + '" value="' + data[input]['value'] + '" />').appendTo($form);
+	buildForm: function(s, id) {
+		var $form = $('<form action="" method="POST" id="cjTransportForm-'+id+'" enctype="multipart/form-data"></form>'),
+			$newEl			
+		$form.attr('action', s.url).attr('target', '_self')
+		if($form[0].encoding)
+			$form.attr('encoding', 'multipart/form-data')
+		else
+			$form.attr('enctype', 'multipart/form-data')
+		if(s.data) {
+			for(var input in s.data) {
+				if(s.data.hasOwnProperty(input))
+					$('<input type="hidden" name="' + s.data[input]['name'] + '" value="' + s.data[input]['value'] + '" />').appendTo($form);
 			}
 		}
-		for(var i = 0; i < files.length; i++) {
-			$newEl = $(files[i]).clone(true)
-			$newEl.insertAfter($(files[i]))
-			$(files[i]).appendTo($form)
+		if(s.files) {
+			for(var i = 0; i < s.files.length; i++) {
+				$newEl = $(s.files[i]).clone(true)
+				$newEl.insertAfter($(s.files[i]))
+				$(s.files[i]).appendTo($form)
+			}
 		}
 		$form.css({position:'absolute',top:'-1200px',left:'-99999px'})
 		return $form
@@ -647,87 +619,54 @@ cj.prototype.transport = {
 	send: function(s) {
 		s = $.extend({}, $.ajaxSettings, s)
 		var id = new Date().getTime(),
-			$form = cj.transport.buildForm(id, s.files, (typeof(s.data)=='undefined'?false:s.data)),
-			$io = cj.transport.buildIframe(id, s.secureuri)
+			$form = transport.buildForm(s, id),
+			$io = transport.buildIframe(id, s.secureuri)
 			
 		$io.appendTo($('body')).contents().find('body').append($form)
 
-		var requestDone = false, xml = {}
-		
-		var uploadCallback = function(isTimeout) {
-			var io = $(this)[0]
-			try {
-				if(io.contentWindow) {
-					xml.responseText = io.contentWindow.document.body?io.contentWindow.document.body.innerHTML:null;
-					xml.responseXML = io.contentWindow.document.XMLDocument?io.contentWindow.document.XMLDocument:io.contentWindow.document;
-				} else if(io.contentDocument) {
-					xml.responseText = io.contentDocument.document.body?io.contentDocument.document.body.innerHTML:null;
-					xml.responseXML = io.contentDocument.document.XMLDocument?io.contentDocument.document.XMLDocument:io.contentDocument.document;
-				}
-			} catch(e) {
-				cj.transport.handleError(s, xml, null, e);
-			}
-			if ( xml || isTimeout == "timeout") {
+		var requestDone = false, 
+			response = {}, 
+			uploadCallback = function(e) {
+				var $io = $(this), 
+					status,
+					response
+					
 				requestDone = true
-				var status
 				try {
-					status = isTimeout != "timeout" ? "success" : "error";
-					if ( status != "error" ) {
-						var data = cj.transport.uploadHttpData( xml, s.dataType )
-						if ( s.success )
-							s.success( data, status )
-					} else
-						cj.transport.handleError(s, xml, status)
+					response = $io.contents().find('body').html()
 				} catch(e) {
-					status = "error"
-					cj.transport.handleError(s, xml, status, e)
+					if( s.error )
+						s.error('iframe troubles')
+				}
+
+				if ( response || e.timeout ) {
+					status = (!e.timeout) ? 'success' : 'error';
+					if ( status !== "error" ) {
+						if ( s.success )
+							s.success( response, status )
+					} else {
+						if(s.error)
+							s.error(status)
+					}
 				}
 				if ( s.complete )
-					s.complete(xml, status)
+					s.complete( response, status )
+
 				setTimeout(function() {
-					try {
-						$io.remove()
-						$form.remove()
-					} catch(e) {
-						cj.transport.handleError(s, xml, null, e)
-					}
-				}, 100)
-				xml = null
+					$io.remove()
+					$form.remove()
+				},100)
 			}
-		}
-		if ( s.timeout > 0 ) {
-			setTimeout(function(){
-				if( !requestDone ) uploadCallback( "timeout" )
-				}, s.timeout)
-		}
-		try {
-			$form.attr('action', s.url).attr('method', 'POST').attr('target', '_self')
-			if($form[0].encoding)
-				$form.attr('encoding', 'multipart/form-data')
-			else
-				$form.attr('enctype', 'multipart/form-data')
-			$form.submit()
-		} catch(e) {
-			cj.transport.handleError(s, xml, null, e)
+		
+		if ( s.timeout ) {
+			setTimeout(function() {
+				if( !requestDone ) 
+					uploadCallback({timeout:true})
+			}, s.timeout)
 		}
 		$io.one('load', uploadCallback)
+		$form.submit()
 		return {abort: function () {}}
-	},
-	uploadHttpData: function( r, type ) {
-		var data = !type
-		data = type == "xml" || data ? r.responseXML : r.responseText
-		if ( type == "script" )
-			$.globalEval( data )
-		if ( type == "json" )
-			eval( "data = " + data )
-		if ( type == "html" )
-			$("<div>").html(data).evalScripts()
-		return data
-	},
-	handleError: function( s, xhr, status, e ) {
-		throw e
-		if ( s.error )
-			s.error.call( s.context || window, xhr, status, e )
 	}
 },
 cj.prototype.ajaxResponse = function(data) {
@@ -750,7 +689,7 @@ cj.prototype.ajaxResponse = function(data) {
 	}
 	flashMessage = $('#flashMessage', response).text()
 
-	if(typeof flashMessage == 'string' && flashMessage != '') {
+	if(typeof flashMessage == 'string' && flashMessage !== '') {
 		var flashOps = {msg: flashMessage, mask: false};
 		if(flashMessage.toString().indexOf('saved') > -1) {
 			flashOps.replace = 'save'
@@ -782,7 +721,7 @@ cj.prototype.ajaxResponse = function(data) {
 			cj._formInit()
 		}
 	}
-	if(typeof arguments[arguments.length-1] == 'function')
+	if(typeof arguments[arguments.length-1] === 'function')
 		arguments[arguments.length-1].call(this, response, success);
 }
 cj.prototype.flash = function(options) {
@@ -909,6 +848,18 @@ cj.prototype.handlers = {
 			})
 		}
 		if(ops.getOnce) $el.data('cj-got', true)
+	},
+	change: function(e) {
+		var $form = $(e.target.form), formId = e.target.form.id
+		if(e.type == 'input' || e.type == 'keyup') {
+			clearTimeout(cj.collectTimeout)
+			cj.collectTimeout = setTimeout(function() {
+					cj.collect($form)
+				}, 400)
+		} else {
+			cj.collect($form)
+		}
+		cj.setButton({status: 'beforeSave', disabled: false, scope: $form})
 	}
 }
 cj.prototype.util = {
