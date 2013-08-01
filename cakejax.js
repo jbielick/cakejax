@@ -328,8 +328,7 @@ cj.prototype = {
 		}
 	},
 	_callback: function(method, request) {
-		var $form = (request.form) ? $(request.form) : $(request), modelized, model
-
+		var $form = (request.form) ? $(request.form) : request, modelized, model
 		try{
 			if($form) {
 				for(var selector in cj.callbacks)
@@ -370,19 +369,13 @@ cj.prototype = {
 			this.request.url = prefix+'/'+this.params.controller+'/delete/'+this.params.id
 			this.request.data = {}
 
-			if(cj._callback('beforeDelete') === false)
+			if(cj._callback('beforeDelete', {}) === false)
 				return false
 
 			if(cj.options.debug)
 				console.log('Deleting: ', this.params)
 		
 			if(confirm("Are you sure you want to delete "+item+"?")) {
-			
-				var $deletable = $caller.parents('.deletable').first()
-				if(!$deletable[0])
-					$deletable = $caller.parents('tr').first()
-
-				$deletable.fadeOut(function(){$deletable.remove()})
 
 				$.ajax({
 					url: this.request.url,
@@ -391,7 +384,12 @@ cj.prototype = {
 					success: function(data) {
 						cj.ajaxResponse(data, undefined, function(response, success) {
 							if(success) {
-								cj._callback('afterDelete')
+								var $deletable = $caller.parents('.deletable').first()
+								if(!$deletable[0])
+									$deletable = $caller.parents('tr').first()
+
+								$deletable.fadeOut(function(){$deletable.remove()})
+								cj._callback('afterDelete', {})
 								if(refresh)
 									cj.refresh(refresh)
 							}
