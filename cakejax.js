@@ -15,10 +15,10 @@
 
 function cj() {
 	this.options = {	
-		view: '#content',
+		view: '#view',
 		removeAfter: {},
 		debug: false,
-		enable: 'form'
+		enable: 'form.cakejax'
 	}
 	this.request = {}
 	this.params = {
@@ -44,7 +44,7 @@ cj.prototype = {
 		if(typeof arguments[arguments.length-1] === 'function')
 			arguments[arguments.length-1].call(this)
 	},
-	collect: function($form) {
+	collect: function($form, live) {
 		var defs = {
 				refresh: true,
 			},
@@ -85,10 +85,10 @@ cj.prototype = {
 				r.params.controller = (uri.length) ? controller[0] : null
 
 				r.params.model = r.params.model || model
+				r.data[model] = r.data[model] || {}
+				r.inputs[model] = r.inputs[model] || {}
 
 				if(inputs[i].type !== 'file') {
-					r.data[model] = r.data[model] || {}
-					r.inputs[model] = r.inputs[model] || {}
 					//if name attr matches format of HABTM checkbox input ([model][model][])
 					if(oneToManyReg.test(inputs[i].name) || model == field) 
 					{
@@ -143,9 +143,12 @@ cj.prototype = {
 				} else if (inputs[i].type === 'file') {
 					if(oneToManyReg.test(inputs[i].name)) {
 						r.inputs[model] = r.inputs[model] || []
+						r.data[model].push({})
+						r.data[model][r.data[model].length-1][field] = inputs[i].value
 						r.inputs[model].push({})
 						r.inputs[model][r.inputs[model].length-1][field] = inputs[i]
 					} else {
+						r.data[model][field] = inputs[i].value
 						r.inputs[model] = r.inputs[model] || {}
 						r.inputs[model][field] = inputs[i]
 					}
@@ -161,7 +164,7 @@ cj.prototype = {
 		if(cj.options.debug)
 			console.log('#'+r.form.attr('id')+' Request:', r)//JSON.stringify(r.data, null, '\t'));
 	
-		if(r.live) {
+		if(live) {
 			return cj.save(r)
 		}
 		return r
@@ -203,7 +206,7 @@ cj.prototype = {
 								// delete cj.request.data
 							}
 							if(success && request.refresh)
-								$(cj.options.view).replaceWith($(cj.options.view, data))
+								$(cj.options.view).replaceWith($(cj.options.view, response))
 						})
 					},
 					error: function(e, xhr, ms) {
@@ -239,8 +242,6 @@ cj.prototype = {
 								cj._callback('afterSave', request)
 								// delete cj.request.data
 							}
-							if(success && request.refresh)
-								$(cj.options.view).replaceWith($(cj.options.view, data))
 						})
 					},
 					error: function(e, xhr, er, error) {
@@ -328,7 +329,7 @@ cj.prototype = {
 		}
 	},
 	_callback: function(method, request) {
-		var $form = (request.form) ? $(request.form) : request, modelized, model
+		var $form = (request.form && request.form.jquery) ? $(request.form) : request, modelized, model
 		try{
 			if($form) {
 				for(var selector in cj.callbacks)
@@ -474,9 +475,11 @@ cj.prototype = {
 	},
 	refresh: function(options) {
 		var defs = {
-			selector: cj.options.view,
-			url: window.location.pathname
-		}, ops = $.extend({}, defs, options)
+				selector: cj.options.view,
+				url: window.location.pathname
+			}, ops = $.extend({}, defs, options),
+			SCRIPT_REGEX = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+			selectors = ops.selector.split(',')
 	
 		if(cj.options.debug)
 			console.log('Refreshing '+ops.selector+' with '+ops.url)
@@ -487,12 +490,14 @@ cj.prototype = {
 			cache: false,
 			dataType: 'text',
 			success: function(data) {
-				var SCRIPT_REGEX = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,selectors = ops.selector.split(','), $content
+				var $holder = $('<div>'), 
+					$content
 				while (SCRIPT_REGEX.test(data)) {
 				    data = data.replace(SCRIPT_REGEX, "")
 				}
+				$holder.html(data)
 				for (var i = selectors.length - 1; i >= 0; i--){
-					$content = $(selectors[i], data)
+					$content = $holder.find(selectors[i])
 					if(cj.options.debug)
 						console.log($content)
 					if($content.length > 0)
@@ -543,6 +548,7 @@ cj.prototype = {
 		//cj.bind('change', 'input[type="file"]:not([multiple])', cj.util.filePreview)
 		cj.bind('click', '[data-cj-delete]', cj.handlers.del)
 		cj.bind('click', '[data-cj-sort-save]', cj.handlers.sortSave)
+		cj.bind('click', '[data-cj-request]', cj.handlers.request)
 	},
 	bind: function(e, el, callback) {
 		// if(typeof callback == 'undefined')
@@ -622,8 +628,8 @@ cj.prototype = {
 		send: function(s) {
 			s = $.extend({}, $.ajaxSettings, s)
 			var id = new Date().getTime(),
-				$form = transport.buildForm(s, id),
-				$io = transport.buildIframe(id, s.secureuri)
+				$form = cj.transport.buildForm(s, id),
+				$io = cj.transport.buildIframe(id, s.secureuri)
 			
 			$io.appendTo($('body')).contents().find('body').append($form)
 
@@ -673,24 +679,18 @@ cj.prototype = {
 		}
 	},
 	ajaxResponse: function(data) {
-		var $oldForm = this.request.form,
-			response, flashMessage = undefined, success = true, stop = false,
-			$freshForm
-
-		if(!$(data).contents().length) {
-			if(typeof data == 'object' && !data.jQuery) {
-				response = data.responseText
-			}else{
-				try {
-					response = $.parseHTML(data, document, false)
-				} catch(e) {
-					response = data
-				}
-			}
-		} else {
-			response = $(data).contents()
-		}
-		flashMessage = $('#flashMessage', response).text()
+		var $oldForm = cj.request.form,
+			$holding = $('<div>'),
+			$response,
+			flashMessage,
+			success = true,
+			stop = false,
+			$freshForm,
+			$newForm
+ 
+		$response = $holding.html(data)
+	
+		flashMessage = $response.find('#flashMessage').text()
 
 		if(typeof flashMessage == 'string' && flashMessage !== '') {
 			var flashOps = {msg: flashMessage, mask: false};
@@ -701,7 +701,7 @@ cj.prototype = {
 		}
 
 		var logs = (cj.options.debug) ? 'pre.cake-error, .notice, p.error' : 'pre.cake-error, .notice, p.error, pre',
-			$notices = $(logs, response),
+			$notices = $response.find(logs),
 			errors = '<pre>';
 
 		if($notices.length > 0) {
@@ -718,14 +718,14 @@ cj.prototype = {
 			success = false
 
 		if($oldForm) {
-			$freshForm = $('#'+$oldForm[0].id, response)
+			$freshForm = $response.find('#'+$oldForm[0].id)
 			if($freshForm.length) {
 				$oldForm.replaceWith($freshForm.addClass('cj-replaced'))
 				cj._formInit()
 			}
 		}
 		if(typeof arguments[arguments.length-1] === 'function')
-			arguments[arguments.length-1].call(this, response, success);
+			arguments[arguments.length-1].call(this, $response, success);
 	},
 	flash: function(options) {
 		var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length,
@@ -733,10 +733,10 @@ cj.prototype = {
 				msg: 'No message supplied',
 				mask: false,
 				autoRemove: true,
-				linger: 3000,
+				linger: 6000,
 				html: false,
 				addClass: '',
-				replace: false,
+				replace: 'save',
 				modalClass: false
 			},
 			ops
@@ -775,7 +775,7 @@ cj.prototype = {
 			}
 
 			$mask.css({height: document.height+'px'});
-			$('body').append($modal)
+			$('#view').prepend($modal)
 
 			$modal.css({maxHeight: (window.innerHeight - 50)+'px'})
 
@@ -792,11 +792,11 @@ cj.prototype = {
 		}
 		if (ops.autoRemove) {
 			setTimeout(function() {
-				$('#flashMessage-'+modalCount).fadeOut(function() {
-					$(this).remove();
-					if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
-						cj.close();
-				});
+				var $m = $('#flashMessage-'+modalCount)
+				if($('.flashMessageModal > [id^="flashMessage-"]').length == 1)
+					cj.close()
+				else
+					$m.fadeOut(function() {$m.remove()})
 			}, ops.linger);
 		}
 	},
@@ -845,16 +845,33 @@ cj.prototype = {
 			if(ops.getOnce) $el.data('cj-got', true)
 		},
 		change: function(e) {
-			var $form = $(e.target.form)
+			var $form = $(e.target.form),
+				ops = $form.data('cjOptions') || {}
 			if(e.type == 'input' || e.type == 'keyup') {
 				clearTimeout(cj.collectTimeout)
 				cj.collectTimeout = setTimeout(function() {
-						cj.collect($form)
+						cj.collect($form, ops.live)
 					}, 400)
 			} else {
-				cj.collect($form)
+				cj.collect($form, ops.live)
 			}
 			cj.setButton({status: 'beforeSave', disabled: false, scope: $form})
+		},
+		request: function(e) {
+			var ops = $(e.target).data('cjRequest'),
+				ajaxOps = {
+					url: ops.url,
+					type: ops.method,
+					success: function(data) {
+						cj.ajaxResponse(data, null, function() {
+							if(ops.refresh)
+								cj.refresh(ops.refresh)
+						})
+					}
+				}
+			if(ops.data && ops.method.toLowerCase() == 'post')
+				ajaxOps.data = ops.data
+			$.ajax(ajaxOps)
 		}
 	},
 	util: {
