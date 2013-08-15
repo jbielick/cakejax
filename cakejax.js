@@ -1,6 +1,6 @@
 /**==============================================
 * CakeJax v0.5.3 BETA
-* 6/18/2013
+* 8/16/2013
 *
 *  ___ ___    _   ___ __  __ ___ _  _ _____
 * | __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -204,9 +204,9 @@ cj.prototype = {
 								cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
 								cj._callback('afterSave', request)
 								// delete cj.request.data
+								if(request.refresh)
+									cj.refresh(request.refresh)
 							}
-							if(success && request.refresh)
-								$(cj.options.view).replaceWith($(cj.options.view, response))
 						})
 					},
 					error: function(e, xhr, ms) {
@@ -240,6 +240,8 @@ cj.prototype = {
 							if(success) {
 								cj.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
 								cj._callback('afterSave', request)
+								if(request.refresh)
+									cj.refresh(request.refresh)
 								// delete cj.request.data
 							}
 						})
@@ -441,7 +443,6 @@ cj.prototype = {
 				cj._callback('init', cj.collect($form))
 			}
 		})
-		$(document).on('change keyup input', cj.options.enable+' input, textarea, select, radio, checkbox', cj.handlers.change)
 	},
 	setButton: function(options) {
 		var defs = {
@@ -499,7 +500,6 @@ cj.prototype = {
 				for (var i = selectors.length - 1; i >= 0; i--){
 					$content = $holder.find(selectors[i])
 					if(cj.options.debug)
-						console.log($content)
 					if($content.length > 0)
 						$(selectors[i]).replaceWith($content)
 				}
@@ -548,7 +548,8 @@ cj.prototype = {
 		//cj.bind('change', 'input[type="file"]:not([multiple])', cj.util.filePreview)
 		cj.bind('click', '[data-cj-delete]', cj.handlers.del)
 		cj.bind('click', '[data-cj-sort-save]', cj.handlers.sortSave)
-		cj.bind('click', '[data-cj-request]', cj.handlers.request)
+		cj.bind('click', '.cj-request', cj.handlers.request)
+		cj.bind('change keyup input', cj.options.enable+' input,'+cj.options.enable+' textarea,'+cj.options.enable+' select,'+cj.options.enable+' radio,'+cj.options.enable+' checkbox', cj.handlers.change)
 	},
 	bind: function(e, el, callback) {
 		// if(typeof callback == 'undefined')
@@ -858,19 +859,17 @@ cj.prototype = {
 			cj.setButton({status: 'beforeSave', disabled: false, scope: $form})
 		},
 		request: function(e) {
-			var ops = $(e.target).data('cjRequest'),
+			var ops = $(e.currentTarget).data('cjRequest'),
 				ajaxOps = {
 					url: ops.url,
-					type: ops.method,
+					type: ops.type,
 					success: function(data) {
-						cj.ajaxResponse(data, null, function() {
-							if(ops.refresh)
-								cj.refresh(ops.refresh)
-						})
+						Hist.get(window.location.pathname)
 					}
 				}
-			if(ops.data && ops.method.toLowerCase() == 'post')
+			if(ops.data && ops.type.toLowerCase() == 'post')
 				ajaxOps.data = ops.data
+			cj.flash({msg:'Saving...',addClass: '.save'})
 			$.ajax(ajaxOps)
 		}
 	},
