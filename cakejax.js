@@ -1,6 +1,6 @@
 /**==============================================
 * CakeJax v0.5.3 BETA
-* 8/16/2013
+* 8/20/2013
 *
 *  ___ ___    _   ___ __  __ ___ _  _ _____
 * | __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -340,7 +340,7 @@ cj.prototype = {
 							return false
 			}
 			for(model in request.data) {
-				if(this.request.data.hasOwnProperty(model) && cj.callbacks[model] && cj.callbacks[model][method]) {
+				if(request.data.hasOwnProperty(model) && cj.callbacks[model] && cj.callbacks[model][method]) {
 					if(cj.callbacks[model][method](request) === false)
 						return false
 				}
@@ -568,7 +568,8 @@ cj.prototype = {
 	},
 	sort: function(selector, items, handle) {
 		var items = items || 'tr',
-			handle = (typeof handle == 'undefined') ? '' : handle
+			handle = (typeof handle == 'undefined') ? '' : handle,
+			request
 
 		$(selector).sortable({
 			items: items,
@@ -581,7 +582,8 @@ cj.prototype = {
 			update: function(event, ui) {
 				var action = $(this).data('cjAction')
 				if(action) {
-					ui.item.parents('[data-cj-action]').first().data('cjSortData', $(this).sortable('serialize'))
+					request = { url : action, data : $(this).sortable('serialize') }
+					ui.item.parents('[data-cj-action]').first().data('cjSortData', request)
 					// cj.setButton({status: 'beforeSave', disabled: false})
 				}
 				else cj.flash({msg: 'You forgot to define a \'data-cj-action\' attribute on your sortable container!', error: true});
@@ -812,6 +814,7 @@ cj.prototype = {
 			$(selector).each(function() {
 				var $el = $(this)
 				if($el.data('cjSortData')) {
+					request = $el.data('cjSortData');
 					cj.save(request)
 				}
 			})
