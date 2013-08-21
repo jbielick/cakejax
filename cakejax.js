@@ -1,6 +1,6 @@
 /**==============================================
 * CakeJax v0.5.3 BETA
-* 8/16/2013
+* 8/20/2013
 *
 *  ___ ___    _   ___ __  __ ___ _  _ _____
 * | __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -339,8 +339,13 @@ function cakejax() {
 							return false
 			}
 			for(model in request.data) {
+<<<<<<< HEAD
 				if(this.request.data.hasOwnProperty(model) && _this.callbacks[model] && _this.callbacks[model][method]) {
 					if(_this.callbacks[model][method](request) === false)
+=======
+				if(request.data.hasOwnProperty(model) && cj.callbacks[model] && cj.callbacks[model][method]) {
+					if(cj.callbacks[model][method](request) === false)
+>>>>>>> 3184749ffc7a7f89462c366afb56e4cff0177f87
 						return false
 				}
 			}
@@ -567,7 +572,8 @@ function cakejax() {
 	}
 	this.sort = function(selector, items, handle) {
 		var items = items || 'tr',
-			handle = (typeof handle == 'undefined') ? '' : handle
+			handle = (typeof handle == 'undefined') ? '' : handle,
+			request
 
 		$(selector).sortable({
 			items: items,
@@ -580,7 +586,13 @@ function cakejax() {
 			update: function(event, ui) {
 				var action = $(this).data('cjAction')
 				if(action) {
+<<<<<<< HEAD
 					ui.item.parents('[data-cj-action]').first().data('cjSortData', $(this).sortable('serialize'))
+=======
+					request = { url : action, data : $(this).sortable('serialize') }
+					ui.item.parents('[data-cj-action]').first().data('cjSortData', request)
+					// cj.setButton({status: 'beforeSave', disabled: false})
+>>>>>>> 3184749ffc7a7f89462c366afb56e4cff0177f87
 				}
 				else _this.flash({msg: 'You forgot to define a \'data-cj-action\' attribute on your sortable container!', error: true});
 			}
@@ -810,6 +822,7 @@ function cakejax() {
 			$(selector).each(function() {
 				var $el = $(this)
 				if($el.data('cjSortData')) {
+					request = $el.data('cjSortData')
 					_this.save(request)
 				}
 			})
