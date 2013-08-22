@@ -1,6 +1,6 @@
 /**==============================================
 * CakeJax v0.5.3 BETA
-* 8/20/2013
+* 8/16/2013
 *
 *  ___ ___    _   ___ __  __ ___ _  _ _____
 * | __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -21,6 +21,7 @@ function cakejax() {
 		debug: false,
 		enable: 'form.cakejax'
 	}
+	this.timers = {}
 	this.request = {}
 	this.params = {
 		here: window.location.pathname,
@@ -36,9 +37,8 @@ function cakejax() {
 		if(typeof CKEDITOR !== 'undefined') {
 			try{CKEDITOR.replaceAll()}catch(e){/*don't care*/}
 		}
-
 		_this._binds()
-		_this._formInit()
+		_this._init()
 
 		if(typeof arguments[arguments.length-1] === 'function')
 			arguments[arguments.length-1].call(this)
@@ -55,11 +55,15 @@ function cakejax() {
 			habtmReg = /\[\]/,
 			oneToManyReg = /[a-z_0-9]+\]\[[0-9]+\]\[[a-z_0-9]+\]/i,
 			model = '',
+			r = {data: {}, files: [], inputs: {}, form: $form, url: uri, refresh: ops.refresh, live: ops.live, method: $form.attr('method'), params: {}},
 			controller,
 			i,action,
 			inputs = $form[0].elements,
-			_this,relationship,params,field,belongsToField,habtmIndex,
-			r = {data: {}, files: [], inputs: {}, form: $form, url: uri, refresh: ops.refresh, live: ops.live, method: $form.attr('method'), params: {}}
+			relationship,
+			params,
+			field,
+			belongsToField,
+			habtmIndex
 
 		if(_this.options.debug)
 			console.log('Collecting: #'+$form[0].id, 'Options: ', options)
@@ -172,18 +176,6 @@ function cakejax() {
 		if(!$.isEmptyObject(request.data)) {
 			if(_this.options.debug)
 				console.log('Saving...', request)
-			
-			if(request.form) {
-			
-				if(_this._callback('beforeValidate', request) === false)
-					return false
-			
-				if(_this._validate.check(request) === false)
-					return false
-			}
-		
-			if(_this._callback('beforeSave', request) === false)
-				return false
 
 			_this.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'});
 
@@ -221,7 +213,7 @@ function cakejax() {
 							{
 								$('.flashMessageModal').append($(this))
 								$('.flashMessageModal form').addClass('cj')
-								_this._formInit()
+								_this._init()
 							})
 							return false
 						}
@@ -339,13 +331,8 @@ function cakejax() {
 							return false
 			}
 			for(model in request.data) {
-<<<<<<< HEAD
 				if(this.request.data.hasOwnProperty(model) && _this.callbacks[model] && _this.callbacks[model][method]) {
 					if(_this.callbacks[model][method](request) === false)
-=======
-				if(request.data.hasOwnProperty(model) && cj.callbacks[model] && cj.callbacks[model][method]) {
-					if(cj.callbacks[model][method](request) === false)
->>>>>>> 3184749ffc7a7f89462c366afb56e4cff0177f87
 						return false
 				}
 			}
@@ -409,15 +396,15 @@ function cakejax() {
 			}
 		}
 	}
-	this._formInit = function(form) {
+	this._init = function() {
 		$(document).off('change keyup input', _this.options.enable+' input, textarea, select, radio, checkbox', _this.handlers.change)
-		if(typeof CKEDITOR !== 'undefined' && CKEDITOR.instances )
-		{
+		
+		if(typeof CKEDITOR !== 'undefined' && CKEDITOR.instances ) {
 			var eds = CKEDITOR.instances;
 			for(var i in eds)
 				if(eds.hasOwnProperty(i)) {
 					_this.ck = {}
-					_this.ck[i] = eds[i].getData()
+					_this.ck[i] = eds[i].getData();
 					var CKinterval = setInterval(function() {
 						if(_this.ck[i] !== eds[i].getData()) {
 							_this.ck[i] = eds[i].getData()
@@ -426,23 +413,15 @@ function cakejax() {
 					}, 300);
 				}
 		}
+		_this.timers = _this.timers || {}
 
-		if(!_this.timers)
-			_this.timers = {}
-
-		var $forms = $(_this.options.enable), $form
-		
+		var $forms = $('form'), $form
 		$forms.each(function() {
 			$form = $(this)
-			if(!$(this).data('cakejax')) {
+			if(!$form.data('cjRequest')) {
 				if(_this.options.debug)
-					console.log('\t\tNow Listening To: '+$(this).attr('id'));
-				$form
-					.data('cakejax', true)
-					.on('submit', function(e) {
-						_this.save(_this.collect($(this)))
-						return false
-					})
+					console.log('\t\tNow Listening To: '+$(this)[0]);
+				$form.data('cjRequest', _this.collect($form))
 				_this.setButton({status: 'beforeChange', disabled: false, scope: $form})
 				_this._callback('init', _this.collect($form))
 			}
@@ -507,7 +486,7 @@ function cakejax() {
 					if($content.length > 0)
 						$(selectors[i]).replaceWith($content)
 				}
-				_this._formInit()
+				_this._init()
 			}
 		})
 	}
@@ -535,7 +514,7 @@ function cakejax() {
 				}
 				else _this.flash({msg: data, html: true, autoRemove: false, mask: true})
 
-				_this._formInit()
+				_this._init()
 
 				if(typeof arguments[arguments.length-1] === 'function')
 					arguments[arguments.length-1].call(this, $content);
@@ -547,6 +526,7 @@ function cakejax() {
 		})
 	}
 	this._binds = function() {
+		_this.bind('submit', 'form', _this.handlers.submit)
 		_this.bind('click', '[data-cj-get]', _this.handlers.get)
 		_this.bind('keyup', _this.handlers.close)
 		//_this.bind('change', 'input[type="file"]:not([multiple])', _this.util.filePreview)
@@ -572,8 +552,7 @@ function cakejax() {
 	}
 	this.sort = function(selector, items, handle) {
 		var items = items || 'tr',
-			handle = (typeof handle == 'undefined') ? '' : handle,
-			request
+			handle = (typeof handle == 'undefined') ? '' : handle
 
 		$(selector).sortable({
 			items: items,
@@ -586,13 +565,7 @@ function cakejax() {
 			update: function(event, ui) {
 				var action = $(this).data('cjAction')
 				if(action) {
-<<<<<<< HEAD
 					ui.item.parents('[data-cj-action]').first().data('cjSortData', $(this).sortable('serialize'))
-=======
-					request = { url : action, data : $(this).sortable('serialize') }
-					ui.item.parents('[data-cj-action]').first().data('cjSortData', request)
-					// cj.setButton({status: 'beforeSave', disabled: false})
->>>>>>> 3184749ffc7a7f89462c366afb56e4cff0177f87
 				}
 				else _this.flash({msg: 'You forgot to define a \'data-cj-action\' attribute on your sortable container!', error: true});
 			}
@@ -732,7 +705,7 @@ function cakejax() {
 			$freshForm = $response.find('#'+$oldForm[0].id)
 			if($freshForm.length) {
 				$oldForm.replaceWith($freshForm.addClass('cj-replaced'))
-				_this._formInit()
+				_this._init()
 			}
 		}
 		if(typeof arguments[arguments.length-1] === 'function')
@@ -765,7 +738,7 @@ function cakejax() {
 		}
 
 		if(_this.options.debug)
-			ops.autoRemove = false;
+			ops.autoRemove = false
 
 		if($('.flashMessageModal').length == 0) {
 			var $modal = $('<div></div>', {
@@ -792,8 +765,7 @@ function cakejax() {
 
 			$modal.fadeIn('slow', function(){ $(this).addClass('open-modal'); })
 
-			if(ops.mask)
-			{
+			if(ops.mask) {
 				$('body').append($mask)
 				$mask.fadeIn('slow')
 			}
@@ -822,7 +794,6 @@ function cakejax() {
 			$(selector).each(function() {
 				var $el = $(this)
 				if($el.data('cjSortData')) {
-					request = $el.data('cjSortData')
 					_this.save(request)
 				}
 			})
@@ -877,6 +848,17 @@ function cakejax() {
 				}
 			if(ops.data && ops.type.toLowerCase() == 'post')
 				request.data = ops.data
+				_this.save(request)
+		},
+		submit: function(e) {
+			var request = _this.collect($(e.currentTarget))
+			if(_this._callback('beforeValidate', request) === false)
+				return false
+			if(_this._validate.check(request) === false)
+				return false
+			if(_this._callback('beforeSave', request) === false)
+				return false
+			if(request.form && request.form.is(_this.options.enable))
 				_this.save(request)
 		}
 	},
