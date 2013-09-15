@@ -129,52 +129,36 @@ function cakejax() {
 
 			_this.setButton({status:'duringSave', disabled: true, scope: request.form})
 
-			if (!request.files || request.files && request.files.length == 0) {
-				$.ajax({
-					url: request.url,
-					type: request.method || 'POST',
-					dataType: 'text',
-					data: request.data,
-					cache: false,
-					complete: function(xhr)
-					{
-						_this.ajaxResponse(xhr, request, function(request, success) {
-							_this._callback('afterSave', request)
-							if (success) {
-								_this.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
-								// delete _this.request.data
-								if (request.refresh)
-									_this.refresh(request.refresh)
-							}
-						})
-					}
-				})
+			var ajaxOps = {
+				url: request.url,
+				type: requst.method || 'POST',
+				dataType: 'text',
+				cache: false,
+				complete: function(xhr) {
+					_this.ajaxResponse(xhr, request, function(request, success) {
+						_this._callback('afterSave', request)
+						if (success) {
+							_this.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
+							if (request.refresh)
+								_this.refresh(request.refresh)
+						}
+					})
+				}
+			}
+
+			if (!request.files || request.files.length === 0) {
+				ajaxOps.data = request.data
+				$.ajax(ajaxOps)
 			}
 			else if (request.files && request.files.length > 0) {
-				_this.transport.send({
-					url: request.url,
-					files: request.files,
-					data: request.form.serializeArray(),
-					complete: function(xhr) {
-						_this.ajaxResponse(xhr, request, function(request, success) {
-							_this._callback('afterSave', request)
-							if (success) {
-								_this.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
-								if (request.refresh)
-									_this.refresh(request.refresh)
-								// delete _this.request.data
-							}
-						})
-					},
-					error: function(e, xhr, er, error) {
-						console.log(e, xhr, er, error)
-					}
-				});
+				ajaxOps.files = request.files
+				ajaxOps.data = request.form.serializeArray()
+				_this.transport.send(ajaxOps)
 			}
 			return true
 		}
 		else
-			return _this.flash('No changes to save!')
+			return false
 	}
 	this._validate = {
 		check: function(request) {
@@ -324,9 +308,6 @@ function cakejax() {
 									_this.refresh(refresh)
 							}
 						})
-					},
-					error: function(xhr, e, msg) {
-						console.log(xhr, e, msg);
 					}
 				})
 			}
@@ -442,41 +423,8 @@ function cakejax() {
 		$(document).off('change keyup input', tags.join(', '), _this.handlers.change)
 		_this.bind('change keyup input', tags.join(', '), _this.handlers.change)
 	}
-	this.bind = function(e, el, callback) {
-		// if (typeof callback == 'undefined')
-		// 	var ui = el.name || new Date().getTime()
-		// else
-		// 	var ui = callback.name || el
-		// if (!_this.listeners[e+':'+ui]) {
-		// 	_this.listeners[e+':'+ui] = true
-			if (typeof el === 'function') {
-				$(document).on(e, el)
-			} else if (typeof callback === 'function') {
-				$(document).on(e, el, callback)
-			}
-		// }
-		// else return false;
-	}
-	this.sort = function(selector, items, handle) {
-		var items = items || 'tr',
-			handle = (typeof handle == 'undefined') ? '' : handle
-
-		$(selector).sortable({
-			items: items,
-			helper: _this.util.fixHelper,
-			cursor: 'move',
-			handle: handle,
-			start: function(e, ui){
-				ui.placeholder.height(ui.item.height())
-			},
-			update: function(event, ui) {
-				var action = $(this).data('cjAction')
-				if (action) {
-					ui.item.parents('[data-cj-action]').first().data('cjSortData', $(this).sortable('serialize'))
-				}
-				else _this.flash({msg: 'You forgot to define a \'data-cj-action\' attribute on your sortable container!', error: true});
-			}
-		}).disableSelection()
+	this.bind = function() {
+		$(document).on.apply(Array.prototype.slice.call(arguments))
 	}
 	this.transport = {
 		buildIframe: function(id, uri) {
@@ -727,15 +675,6 @@ function cakejax() {
 		})
 	}
 	this.handlers = {
-		sortSave: function(e) {
-			var selector = $(e.currentTarget).data('cjSortSave'), request
-			$(selector).each(function() {
-				var $el = $(this)
-				if ($el.data('cjSortData')) {
-					_this.save(request)
-				}
-			})
-		},
 		del: function(e) {
 			var params = $(e.currentTarget).data('cjDelete')
 			params = $.extend({}, params, {caller: e.currentTarget})
@@ -808,11 +747,6 @@ function cakejax() {
 		}
 	}
 	this.util = {
-		fixHelper: function(e, ui) {
-			var $original = ui,
-				$helper = ui.clone()
-			return $helper.width($original.width()).height($original.height())
-		},
 		filePreview: function(e) {
 			var files = e.target.files
 			for (var i=0; f = files[i]; i++) {
@@ -836,8 +770,38 @@ function cakejax() {
 		}
 	},
 	this.Hash = {
+		extract: function(data, path) {
+			if(!new RegExp('[{\[]').test(path))
+				return this.get(data, path) || []
+			var tokens = this._tokenize(path),
+				got = [], out = [], context = {set: [data]}
+				
+			for (var i = 0; i < tokens.length; i++) {
+				got = []
+				for (var z = 0; z < context.set.length; z++) {
+					for (var key in context.set[z]) if (context.set[z].hasOwnProperty(key)) {
+						if (this._matchToken(key, tokens[i]))
+							got.push(context.set[z][key])
+					}
+				}
+				context.set = got
+			}
+			return context.set
+		},
+		_matchToken: function(key, token) {
+			if (token === '{n}')
+				return (Number(key) % 1 === 0)
+			if (token === '{s}')
+				return typeof key === 'string'
+			if (Number(token) % 1 === 0)
+				return (key == token)
+			return (key === token)
+		},
+		_matches: function(val, condition) {
+			
+		},
 		expand: function(data, delimiter) {
-			var path, tokens ,delimiter = delimiter || '.',
+			var path, tokens, delimiter = delimiter || '.',
 				parent, child, out = {}, cleanPath, val, curr
 				
 			if(!data.length)
