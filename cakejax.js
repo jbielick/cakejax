@@ -31,17 +31,13 @@ function cakejax() {
 	this.validates = {}
 	this.callbacks = {}
 	
-	this.init = function(options) {
-		_this.options = $.extend(true, {}, _this.options, options)
-
-		if (typeof CKEDITOR !== 'undefined') {
-			try{CKEDITOR.replaceAll()}catch(e){/*don't care*/}
-		}
+	this.init = function(config) {
+		_this = $.extend(true, {}, _this, config)
 		_this._binds()
 		_this._init()
 
 		if (typeof arguments[arguments.length-1] === 'function')
-			arguments[arguments.length-1].call(this)
+			arguments[arguments.length-1].call(_this)
 	}
 	this._init = function() {
 		if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances ) {
@@ -69,11 +65,11 @@ function cakejax() {
 				r =  _this.collect($form[0])
 				$form.data('cjRequest', r)
 				// _this.setButton({status: 'beforeChange', disabled: false, scope: $form})
-				_this._callback('init', r)
+				_this.callback('init', r)
 			}
 		})
 	}
-	this.collect = function(form) {
+	this.__proto__.collect = function(form) {
 		var defs = {
 				refresh: false,
 			},
@@ -97,7 +93,6 @@ function cakejax() {
 
 		if (_this.options.debug)
 			console.log('Collecting: #'+$(form).attr('id'), 'Options:', ops)
-
 		//collect inputs and prepare for expand
 		for (var i = 0; i < inputs.length; i++) {
 			if (inputs[i].name && inputs[i].name.indexOf('data') > -1) {
@@ -110,8 +105,8 @@ function cakejax() {
 			}
 		}
 		
-		r.data = _this.Hash.expand(_serialized, '][')
-		r.inputs = _this.Hash.expand(_serializedDOM, '][')
+		r.data = _this.Hash.expand(_serialized)
+		r.inputs = _this.Hash.expand(_serializedDOM)
 		
 		$form.data('cjRequest', r)
 		
@@ -120,7 +115,7 @@ function cakejax() {
 
 		return typeof r.live !== 'undefined' ? _this.save(r) : r
 	}
-	this.save = function(request) {
+	this.__proto__.save = function(request) {
 		if (!$.isEmptyObject(request.data)) {
 			if (_this.options.debug)
 				console.log('Saving...', request)
@@ -131,12 +126,12 @@ function cakejax() {
 
 			var ajaxOps = {
 				url: request.url,
-				type: requst.method || 'POST',
+				type: request.method || 'POST',
 				dataType: 'text',
 				cache: false,
 				complete: function(xhr) {
 					_this.ajaxResponse(xhr, request, function(request, success) {
-						_this._callback('afterSave', request)
+						_this.callback('afterSave', request)
 						if (success) {
 							_this.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
 							if (request.refresh)
@@ -232,7 +227,7 @@ function cakejax() {
 			}
 		}
 	}
-	this._callback = function(method, arg) {
+	this.__proto__.callback = function(method, arg) {
 		var $form = (arg.form) ? $(arg.form) : arg, model
 		if (typeof arg.data == 'object') {
 			try {
@@ -268,7 +263,7 @@ function cakejax() {
 			return true
 		}
 	}
-	this.del = function(params) {
+	this.__proto__.del = function(params) {
 		var item = params.item || 'this item',
 			refresh = params.refresh || false,
 			$caller = $(params.caller),
@@ -283,7 +278,7 @@ function cakejax() {
 			_this.request.url = prefix+'/'+_this.params.controller+'/delete/'+_this.params.id
 			request.data = {}
 
-			if (_this._callback('beforeDelete', {}) === false)
+			if (_this.callback('beforeDelete', {}) === false)
 				return false
 
 			if (_this.options.debug)
@@ -297,7 +292,7 @@ function cakejax() {
 					cache: false,
 					complete: function(xhr) {
 						_this.ajaxResponse(xhr, request, function(request, success) {
-							_this._callback('afterSave', request)
+							_this.callback('afterSave', request)
 							if (success) {
 								var $deletable = $caller.parents('.deletable').first()
 								if (!$deletable[0])
@@ -313,7 +308,7 @@ function cakejax() {
 			}
 		}
 	}
-	this.setButton = function(options) {
+	this.__proto__.setButton = function(options) {
 		var defs = {
 				status: 'beforeChange',
 				disabled: false,
@@ -343,7 +338,7 @@ function cakejax() {
 			if (el.tagName == 'BUTTON') el.disabled = ops.disabled
 		}
 	}
-	this.refresh = function(options) {
+	this.__proto__.refresh = function(options) {
 		var defs = {
 				selector: _this.options.view,
 				url: window.location.pathname
@@ -376,7 +371,7 @@ function cakejax() {
 			}
 		})
 	}
-	this.get = function(options, callback) {
+	this.__proto__.get = function(options, callback) {
 		var ops = {
 			selector: 'form',
 			insertLoc: false,
@@ -412,21 +407,21 @@ function cakejax() {
 		})
 	}
 	this._binds = function() {
-		_this.bind('submit', 'form', _this.handlers.submit)
-		_this.bind('click', '[data-cj-get]', _this.handlers.get)
-		_this.bind('keyup', _this.handlers.close)
+		_this.bind('click', '[type="submit"]', _this._handlers.whichSubmit)
+		_this.bind('submit', 'form', _this._handlers.submit)
+		_this.bind('click', '[data-cj-get]', _this._handlers.get)
+		_this.bind('keyup', _this._handlers.close)
 		//_this.bind('change', 'input[type="file"]:not([multiple])', _this.util.filePreview)
-		_this.bind('click', '[data-cj-delete]', _this.handlers.del)
-		_this.bind('click', '[data-cj-sort-save]', _this.handlers.sortSave)
-		_this.bind('click', '.cj-request', _this.handlers.request)
+		_this.bind('click', '[data-cj-delete]', _this._handlers.del)
+		_this.bind('click', '.cj-request', _this._handlers.request)
 		var tags = [ 'input', 'textarea', 'select', 'radio', 'checkbox']
-		$(document).off('change keyup input', tags.join(', '), _this.handlers.change)
-		_this.bind('change keyup input', tags.join(', '), _this.handlers.change)
+		$(document).off('change keyup input', tags.join(', '), _this._handlers.change)
+		_this.bind('change keyup input', tags.join(', '), _this._handlers.change)
 	}
-	this.bind = function() {
-		$(document).on.apply(Array.prototype.slice.call(arguments))
+	this.__proto__.bind = function() {
+		$().on.apply($(document), Array.prototype.slice.call(arguments))
 	}
-	this.transport = {
+	this.__proto__.transport = {
 		buildIframe: function(id, uri) {
 			var id = 'cjTransportFrame-'+id,
 				$iframe = $('<iframe id="'+id+'" name="'+id+'" style="position:absolute; top:-9999px; left:-9999px" />')
@@ -523,7 +518,7 @@ function cakejax() {
 			return {abort: function () {}}
 		}
 	}
-	this.ajaxResponse = function(xhr, request) {
+	this.__proto__.ajaxResponse = function(xhr, request) {
 		var $oldForm = $(request.form),
 			$holding = $('<div>'),
 			replace = '.save',
@@ -597,7 +592,7 @@ function cakejax() {
 			arguments[arguments.length-1].call(this, request, success)
 		
 	}
-	this.flash = function(options) {
+	this.__proto__.flash = function(options) {
 		var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length,
 			defs = {
 				msg: 'No message supplied',
@@ -634,7 +629,7 @@ function cakejax() {
 				$close = $('<div></div>').addClass('modal-close').html('&times;'),
 				$mask = $('<div></div>').attr('id', 'mask'),
 				htmlPattern = new RegExp('<([A-Z][A-Z0-9]*)\b[^>]*>(.*?)</[A-Z][A-Z0-9]*>', 'i')
-			$modal.append($close),$([$close[0],$mask[0]]).click(_this.handlers.close)
+			$modal.append($close),$([$close[0],$mask[0]]).click(_this._handlers.close)
 			if (ops.html || htmlPattern.test( ops.msg ) )
 				$modal.html(ops.msg)
 			else
@@ -669,12 +664,12 @@ function cakejax() {
 			}, ops.linger);
 		}
 	}
-	this.close = function() {
+	this.__proto__.close = function() {
 		$('.flashMessageModal, #mask').each(function(){
 			$(this).fadeOut('fast',function(){$(this).remove()})
 		})
 	}
-	this.handlers = {
+	this._handlers = {
 		del: function(e) {
 			var params = $(e.currentTarget).data('cjDelete')
 			params = $.extend({}, params, {caller: e.currentTarget})
@@ -705,17 +700,15 @@ function cakejax() {
 			if (ops.getOnce) $el.data('cj-got', true)
 		},
 		change: function(e) {
-			var $form = $(e.target.form),
-				ops = $form.data('cjOptions') || {}
-			if (e.type == 'input' || e.type == 'keyup') {
+			if(e.target.name) {
+				var data = _this.Hash.get($(e.target.form).data('cjRequest'), 'data'),
+				serialized = [], hold = {}
 				clearTimeout(_this.collectTimeout)
 				_this.collectTimeout = setTimeout(function() {
-						_this.collect(e.target.form, ops.live)
-					}, 400)
-			} else {
-				_this.collect(e.target.form, ops.live)
+					_this.collect(e.target.form)
+				}, 100)
+				_this.setButton({status: 'beforeSave', disabled: false, scope: $(e.target.form)})
 			}
-			_this.setButton({status: 'beforeSave', disabled: false, scope: $form})
 		},
 		request: function(e) {
 			var ops = $(e.currentTarget).data('cjRequest'),
@@ -729,24 +722,30 @@ function cakejax() {
 		},
 		submit: function(e) {
 			var request = _this.collect(e.currentTarget), beforeSave
-			if (_this._callback('beforeValidate', request) === false)
+			if (_this.callback('beforeValidate', request) === false)
 				return false
 			if (_this._validate.check(request) === false)
 				return false
-				
-			beforeSave = _this._callback('beforeSave', request)
-			
+			beforeSave = _this.callback('beforeSave', request)
 			if (beforeSave === false)
 				return false
-			else if (beforeSave && beforeSave !== true)
-				request = beforeSave
+				
 			if (request.form && $(request.form).is(_this.options.enable)) {
+				if (beforeSave && beforeSave !== true)
+					request = beforeSave
 				_this.save(request)
 				return false
 			}
+		},
+		whichSubmit: function(e) {
+			$(e.currentTarget).parents('form').first().append($('<input>', {
+				name: e.currentTarget.name,
+				value: e.currentTarget.value,
+				style: 'display:none'
+			}))
 		}
 	}
-	this.util = {
+	this._util = {
 		filePreview: function(e) {
 			var files = e.target.files
 			for (var i=0; f = files[i]; i++) {
@@ -769,7 +768,7 @@ function cakejax() {
 			}
 		}
 	},
-	this.Hash = {
+	this.__proto__.Hash = {
 		extract: function(data, path) {
 			if(!new RegExp('[{\[]').test(path))
 				return this.get(data, path) || []
@@ -800,9 +799,8 @@ function cakejax() {
 		_matches: function(val, condition) {
 			
 		},
-		expand: function(data, delimiter) {
-			var path, tokens, delimiter = delimiter || '.',
-				parent, child, out = {}, cleanPath, val, curr
+		expand: function(data) {
+			var path, tokens, parent, child, out = {}, cleanPath, val, curr
 				
 			if(!data.length)
 				data = [data]
@@ -810,14 +808,18 @@ function cakejax() {
 			for (var i = 0; i < data.length; i++) {
 				curr = data[i]
 				for (var path in curr) if(curr.hasOwnProperty(path)) {
-					tokens = this._tokenize(path, delimiter).reverse()
+					tokens = this._tokenize(path).reverse()
 					val = typeof curr[path] === 'function' ? curr[path]() : curr[path]
-					if (tokens[0] === '' || tokens[0] === '{n}') {
+					if (tokens[0] === '{n}') {
 						child = []
 						if (typeof val === 'object')
 							child = val || ''
-						else
-							$.merge(child, val)
+						else {
+							if ($.isArray(val))
+								$.merge(child, val)
+							else
+								child.push(val)
+						}
 					} else {
 						child = {}
 						child[tokens[0]] = val
@@ -835,9 +837,9 @@ function cakejax() {
 			}
 			return out
 		},
-		get: function(data, path, delimiter) {
+		get: function(data, path) {
 			var out = data,
-				tokens = this._tokenize(path, delimiter)
+				tokens = this._tokenize(path)
 			for (var i = 0; i < tokens.length; i++) {
 				if (typeof out === 'object' && typeof out[tokens[i]] !== 'undefined')
 					out = out[tokens[i]]
@@ -847,34 +849,93 @@ function cakejax() {
 			return out
 		},
 		merge: function() {
-			var obs = Array.prototype.slice.call(arguments),
-				out = obs.shift()
+			var obs = Array.prototype.slice.call(arguments), out, dest = false
+			
+			if (typeof arguments[0] === 'boolean')
+				dest = obs.shift()
+				
+			out = obs.shift()
 			for (var i = 0; i < obs.length; i++) {
 				for (var key in obs[i]) if (obs[i].hasOwnProperty(key)) {
 					//for the love of god, please don't traverse DOM nodes
 					if (typeof obs[i][key] === 'object' && out[key] && !out.nodeType && !obs[i][key].nodeType)
-						out[key] = this.merge(out[key], obs[i][key])
-					else if (Number(key) % 1 === 0)
+						out[key] = this.merge(dest, out[key], obs[i][key])
+					else if (Number(key) % 1 === 0 && $.isArray(out) && $.isArray(obs[i]) && !dest)
 						out.push(obs[i][key])
 					else
-						out[key] = obs[i][key]
+						out[key] = obs[i][key] // but you can store them, k?
 				}
 			}
 			return out
 		},
-		insert: function(data, path, values, delimiter) {
-			var tokens = this._tokenize(path, delimiter)
+		insert: function(data, path, values) {
+			var tokens = this._tokenize(path), token, nextPath, expand = {}
 			if (path.indexOf('{') === -1) {
-				
+				return this._simpleOp('insert', data, tokens, values)
+			}
+			if (!$.isEmptyObject(data)) {
+				token = tokens.shift()
+				nextPath = tokens.join('.')
+				for (var key in data) if (data.hasOwnProperty(key)) {
+					if (this._matchToken(key, token)) {
+						if(!nextPath)
+							data[key] = values
+						else
+							data[key] = this.insert(data[key], nextPath, values)
+					}
+				}
 			} else {
-				
+				expand[path] = values
+				return this.expand([expand])
+			}
+			return data
+		},
+		remove: function(data, path) {
+			var tokens = this._tokenize(path), match, token, nextPath
+			if (path.indexOf('{') === -1) {
+				return this._simpleOp('remove', data, tokens)
+			}
+			token = tokens.shift()
+			nextPath = tokens.join('.')
+			for (var key in data) if (data.hasOwnProperty(key)) {
+				match = this._matchToken(key, token)
+				if (match && typeof data[key] === 'object')
+					data[key] = this.remove(data[key], nextPath)
+				else if (match)
+					delete data[key]
+			}
+			return data
+		},
+		_simpleOp: function(op, data, tokens, values) {
+			var hold = data
+			for (var i = 0; i < tokens.length; i++) {
+				if (op === 'insert') {
+					if (i === tokens.length -1) {
+						hold[tokens[i]] = values
+						return data
+					}
+					if (typeof hold[tokens[i]] === 'undefined') {
+						hold[tokens[i]] = {}
+					}
+					hold = hold[tokens[i]]
+				} else if (op === 'remove') {
+					if (i === tokens.length -1) {
+						delete hold[tokens[i]]
+						return data
+					}
+					if (typeof hold[tokens[i]] === 'undefined') {
+						return data
+					}
+					hold = hold[tokens[i]]
+				}
 			}
 		},
-		_simpleOp: function(op, data, path, values) {
-			
-		},
-		_tokenize: function(path, delimiter) {
-			return ( (path.indexOf('data[') > -100) ? path.replace(/^data\[|^\[/, '').replace(/\]$/, '') : path ).split(delimiter || '.')
+		_tokenize: function(path) {
+			if (path.indexOf('data[') === -1) {
+				return path.split('.')
+			} else {
+				return path.replace(/^data/, '').replace(/^\[|\]$/g, '').split('][').map(function(v) {return v === '' ? '{n}' : v })
+			}
 		}
 	}
 }
