@@ -419,7 +419,7 @@ function cakejax() {
 		_this.bind('change keyup input', tags.join(', '), _this._handlers.change)
 	}
 	this.__proto__.bind = function() {
-		$().on.apply($(document), Array.prototype.slice.call(arguments))
+		$.fn.on.apply($(document), Array.prototype.slice.call(arguments))
 	}
 	this.__proto__.transport = {
 		buildIframe: function(id, uri) {
