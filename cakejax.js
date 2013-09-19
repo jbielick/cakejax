@@ -96,6 +96,8 @@ function cakejax() {
 		//collect inputs and prepare for expand
 		for (var i = 0; i < inputs.length; i++) {
 			if (inputs[i].name && inputs[i].name.indexOf('data') > -1) {
+				if(inputs[i].type === 'checkbox' && !inputs[i].checked)
+					continue
 				obj = {}
 				obj[inputs[i].name] = $(inputs[i]).val()
 				_serialized.push(obj)
