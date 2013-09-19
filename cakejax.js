@@ -30,6 +30,7 @@ function cakejax() {
 	this.listeners = {}
 	this.validates = {}
 	this.callbacks = {}
+	this.history = []
 	
 	this.init = function(config) {
 		_this = $.extend(true, {}, _this, config)
@@ -51,7 +52,7 @@ function cakejax() {
 							_this.ck[i] = eds[i].getData()
 							$(eds[i].element.$).trigger('change')
 						}
-					}, 300);
+					}, 300)
 				}
 		}
 		_this.timers = _this.timers || {}
@@ -61,7 +62,7 @@ function cakejax() {
 			$form = $(this)
 			if (!$form.data('cjRequest')) {
 				if (_this.options.debug)
-					console.log('\t\tNow Listening To: '+$(this)[0]);
+					console.log('\t\tNow Listening To: '+$(this)[0])
 				r =  _this.collect($form[0])
 				$form.data('cjRequest', r)
 				// _this.setButton({status: 'beforeChange', disabled: false, scope: $form})
@@ -99,8 +100,12 @@ function cakejax() {
 			if (inputs[i].name && inputs[i].name.indexOf('data') > -1) {
 				if(inputs[i].type === 'checkbox' && !inputs[i].checked)
 					continue
-				obj = {}, obj[inputs[i].name] = $(inputs[i]).val(), _serialized.push(obj)
-				obj2 = {}, obj2[inputs[i].name] = inputs[i], _serializedDOM.push(obj2)
+				obj = {}
+				obj[inputs[i].name] = $(inputs[i]).val()
+				_serialized.push(obj)
+				obj2 = {}
+				obj2[inputs[i].name] = inputs[i]
+				_serializedDOM.push(obj2)
 			}
 		}
 		
@@ -108,9 +113,10 @@ function cakejax() {
 		r.inputs = _this.Hash.expand(_serializedDOM)
 		
 		$form.data('cjRequest', r)
+		
 		if (_this.options.debug)
 			console.log('#'+$(r.form).attr('id')+' Request:', r)//JSON.stringify(r.data, null, '\t'));
-			
+
 		return typeof r.live !== 'undefined' ? _this.save(r) : r
 	}
 	this.__proto__.save = function(request) {
@@ -307,34 +313,34 @@ function cakejax() {
 		}
 	}
 	this.__proto__.setButton = function(options) {
-		var defs = {
-				status: 'beforeChange',
-				disabled: false,
-				scope: $('form').first(),
-				statuses: {
-					beforeChange: {text: 'Saved',addClass: 'cj-static'},
-					duringSave: {text: 'Saving...',addClass: 'cj-saving'},
-					beforeSave: {text: 'Save Changes',addClass: 'cj-ready'},
-					afterSave: {text: 'Saved!',addClass: 'cj-saved'},
-					saveFail: {text: 'Retry Save',addClass: 'cj-failed'}
-				}
-			},
-			text,el,ops = $.extend(true, {}, defs, options),
-			classToAdd
-
-		var $el = $('[onclick^="_this.save"], [type="submit"]', ops.scope)
-
-		if ($el[0] && typeof $el.data('cj-nochange') == 'undefined' && !$el.hasClass(ops.statuses[ops.status].addClass)) {
-			ops.statuses = $.extend(true, {}, ops.statuses, $el.data('cj-statuses'))
-			text = ops.statuses[ops.status].text
-			classToAdd = ops.statuses[ops.status].addClass
-			el = $el[0]
-			if (ops.highlight) $el.addClass('tosave')
-			else $el.removeClass('tosave')
-			if ( el.tagName == 'INPUT') el.value = text
-			else $el.text(text)
-			if (el.tagName == 'BUTTON') el.disabled = ops.disabled
-		}
+		// var defs = {
+	// 			status: 'beforeChange',
+	// 			disabled: false,
+	// 			scope: $('form').first(),
+	// 			statuses: {
+	// 				beforeChange: {text: 'Saved',addClass: 'cj-static'},
+	// 				duringSave: {text: 'Saving...',addClass: 'cj-saving'},
+	// 				beforeSave: {text: 'Save Changes',addClass: 'cj-ready'},
+	// 				afterSave: {text: 'Saved!',addClass: 'cj-saved'},
+	// 				saveFail: {text: 'Retry Save',addClass: 'cj-failed'}
+	// 			}
+	// 		},
+	// 		text,el,ops = $.extend(true, {}, defs, options),
+	// 		classToAdd
+	// 
+	// 	var $el = $('[onclick^="_this.save"], [type="submit"]', ops.scope)
+	// 
+	// 	if ($el[0] && typeof $el.data('cj-nochange') == 'undefined' && !$el.hasClass(ops.statuses[ops.status].addClass)) {
+	// 		ops.statuses = $.extend(true, {}, ops.statuses, $el.data('cj-statuses'))
+	// 		text = ops.statuses[ops.status].text
+	// 		classToAdd = ops.statuses[ops.status].addClass
+	// 		el = $el[0]
+	// 		if (ops.highlight) $el.addClass('tosave')
+	// 		else $el.removeClass('tosave')
+	// 		if ( el.tagName == 'INPUT') el.value = text
+	// 		else $el.text(text)
+	// 		if (el.tagName == 'BUTTON') el.disabled = ops.disabled
+	// 	}
 	}
 	this.__proto__.refresh = function(options) {
 		var defs = {
@@ -408,8 +414,8 @@ function cakejax() {
 		_this.bind('click', '[type="submit"]', _this._handlers.whichSubmit)
 		_this.bind('submit', 'form', _this._handlers.submit)
 		_this.bind('click', '[data-cj-get]', _this._handlers.get)
-		_this.bind('keyup', _this._handlers.close)
-		//_this.bind('change', 'input[type="file"]:not([multiple])', _this.util.filePreview)
+		_this.bind('keyup', _this._handlers.keyup)
+		_this.bind('change', 'input[type="file"]:not([multiple])', _this._handlers.filePreview)
 		_this.bind('click', '[data-cj-delete]', _this._handlers.del)
 		_this.bind('click', '.cj-request', _this._handlers.request)
 		var tags = [ 'input', 'textarea', 'select', 'radio', 'checkbox']
@@ -417,7 +423,7 @@ function cakejax() {
 		_this.bind('change keyup input', tags.join(', '), _this._handlers.change)
 	}
 	this.__proto__.bind = function() {
-		$().on.apply($(document), Array.prototype.slice.call(arguments))
+		$.fn.on.apply($(document), Array.prototype.slice.call(arguments))
 	}
 	this.__proto__.transport = {
 		buildIframe: function(id, uri) {
@@ -673,11 +679,14 @@ function cakejax() {
 			params = $.extend({}, params, {caller: e.currentTarget})
 			_this.del(params)
 		},
-		close: function(e) {
-			if (e.keyCode == 27 
-				|| e.target.className.indexOf('modal-close') > -1 
-				|| e.target.id == 'mask')
-				_this.close()
+		keydown: function(e) {
+			
+		},
+		keyup: function(e) {
+			if(e.keyCode === 27) {
+				if (e.target.className.indexOf('modal-close') > -1 || e.target.id == 'mask')
+					_this.close()
+			}
 		},
 		get: function(e) {
 			e.preventDefault()
@@ -700,7 +709,7 @@ function cakejax() {
 		change: function(e) {
 			if(e.target.name) {
 				var data = _this.Hash.get($(e.target.form).data('cjRequest'), 'data'),
-				serialized = [], hold = {}
+				serialized = [], hold = {}, r
 				clearTimeout(_this.collectTimeout)
 				_this.collectTimeout = setTimeout(function() {
 					_this.collect(e.target.form)
@@ -741,11 +750,9 @@ function cakejax() {
 				value: e.currentTarget.value,
 				style: 'display:none'
 			}))
-		}
-	}
-	this._util = {
+		},
 		filePreview: function(e) {
-			var files = e.target.files
+			var files = e.target.files, f
 			for (var i=0; f = files[i]; i++) {
 				if (!f.type.match('image.*'))
 					continue
@@ -935,15 +942,19 @@ function cakejax() {
 				return path.replace(/^data/, '').replace(/^\[|\]$/g, '').split('][').map(function(v) {return v === '' ? '{n}' : v })
 			}
 		},
-		flatten: function(data, separator) {
+		flatten: function(data, separator, wrap) {
 			var path = '', stack = [], out = {}, key, el, curr, 
 				separator = separator ? separator : '.', data = JSON.parse(JSON.stringify(data))
 			while (!$.isEmptyObject(data)) {
 				key = this.keys(data)[0]
 				el = data[key]
 				delete data[key]
-				if (typeof el !== 'object')
-					out[path + key] = el
+				if (typeof el !== 'object') {
+					if(wrap)
+						out['data['+path+key+']'] = el
+					else
+						out[path + key] = el
+				}
 				else {
 					if (!$.isEmptyObject(data)) {
 						stack.push([data,path])
