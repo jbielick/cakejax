@@ -93,15 +93,12 @@ function cakejax() {
 
 		if (_this.options.debug)
 			console.log('Collecting: #'+$(form).attr('id'), 'Options:', ops)
+			
 		//collect inputs and prepare for expand
 		for (var i = 0; i < inputs.length; i++) {
 			if (inputs[i].name && inputs[i].name.indexOf('data') > -1) {
-				obj = {}
-				obj[inputs[i].name] = $(inputs[i]).val()
-				_serialized.push(obj)
-				obj2 = {}
-				obj2[inputs[i].name] = inputs[i]
-				_serializedDOM.push(obj2)
+				obj = {}, obj[inputs[i].name] = $(inputs[i]).val(), _serialized.push(obj)
+				obj2 = {}, obj2[inputs[i].name] = inputs[i], _serializedDOM.push(obj2)
 			}
 		}
 		
@@ -109,10 +106,9 @@ function cakejax() {
 		r.inputs = _this.Hash.expand(_serializedDOM)
 		
 		$form.data('cjRequest', r)
-		
 		if (_this.options.debug)
 			console.log('#'+$(r.form).attr('id')+' Request:', r)//JSON.stringify(r.data, null, '\t'));
-
+			
 		return typeof r.live !== 'undefined' ? _this.save(r) : r
 	}
 	this.__proto__.save = function(request) {
@@ -419,7 +415,7 @@ function cakejax() {
 		_this.bind('change keyup input', tags.join(', '), _this._handlers.change)
 	}
 	this.__proto__.bind = function() {
-		$.fn.on.apply($(document), Array.prototype.slice.call(arguments))
+		$().on.apply($(document), Array.prototype.slice.call(arguments))
 	}
 	this.__proto__.transport = {
 		buildIframe: function(id, uri) {
@@ -936,6 +932,35 @@ function cakejax() {
 			} else {
 				return path.replace(/^data/, '').replace(/^\[|\]$/g, '').split('][').map(function(v) {return v === '' ? '{n}' : v })
 			}
+		},
+		flatten: function(data, separator) {
+			var path = '', stack = [], out = {}, key, el, curr, 
+				separator = separator ? separator : '.', data = JSON.parse(JSON.stringify(data))
+			while (!$.isEmptyObject(data)) {
+				key = this.keys(data)[0]
+				el = data[key]
+				delete data[key]
+				if (typeof el !== 'object')
+					out[path + key] = el
+				else {
+					if (!$.isEmptyObject(data)) {
+						stack.push([data,path])
+					}
+					data = el
+					path += key + separator
+				}
+				if ($.isEmptyObject(data) && !$.isEmptyObject(stack)) {
+					curr = stack.pop()
+					data = curr[0], path = curr[1]
+				}
+			}
+			return out
+		},
+		keys: function(obj) {
+			var keys = []
+			for (var key in obj) if (obj.hasOwnProperty(key))
+				keys.push(key)
+			return keys
 		}
 	}
 }
