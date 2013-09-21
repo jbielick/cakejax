@@ -85,7 +85,7 @@ function cakejax() {
 				url: $form.prop('action'),
 				refresh: ops.refresh,
 				live: ops.live,
-				method: $form.attr('method').toUpperCase(),
+				method: $form.attr('method'),
 				params: {}
 			},
 			inputs = form.elements,
@@ -136,7 +136,6 @@ function cakejax() {
 					})
 				}
 			}
-
 			if (!request.files || request.files.length === 0) {
 				ajaxOps.data = request.data
 				$.ajax(ajaxOps)
@@ -152,21 +151,21 @@ function cakejax() {
 			return false
 	}
 	this._validate = {
-		check: function(request) {
+		check: function(r) {
 			if (_this.options.debug)
 				console.log('Validating...')
 			var model,field,input,value,ruleGroup,rule,rg,msgs = [],msg
-			$(request.form).find('.input .error-message').remove()
+			$(r.form).find('.input .error-message').remove()
 			$('.error').removeClass('error')
 			for(model in _this.validate)
 				if (_this.validate.hasOwnProperty(model))
-					if (model in request.data)
+					if (model in r.data)
 						for(field in _this.validate[model])
-							if (_this.validate[model].hasOwnProperty(field) && field in request.data[model])
+							if (_this.validate[model].hasOwnProperty(field) && field in r.data[model])
 								for(ruleGroup in _this.validate[model][field])
 									if (_this.validate[model][field].hasOwnProperty(ruleGroup)) {
-										input = request.inputs[model][field]
-										value = request.data[model][field]
+										input = r.inputs[model][field]
+										value = r.data[model][field]
 										rg = _this.validate[model][field][ruleGroup]
 										if (typeof rg.rule === 'function') {
 											if (rg.rule(value) === false)
@@ -191,8 +190,7 @@ function cakejax() {
 					var $input = $(msgs[i].input), 
 						$msg = $('<div class="error-message">'+msgs[i].message+'</div>'),
 						$cur = $input.parent('.error').find('.error-message'),
-						$close = $('<a href="javascript:void(0)" class="right">&times;</a>').click(function(){$(this).parent('.error-message').fadeOut()})
-					$msg.append($close)
+						$close = $('<a href="javascript:void(0)" class="right">&times;</a>').click(function(){$(this).parent('.error-message').fadeOut()}).appendTo($msg)
 					if ($cur.length > 0 && msgs[i].message) {
 						$cur.append('<br>').append(msgs[i].message)
 					} else if (msgs[i].message){
@@ -324,90 +322,20 @@ function cakejax() {
 
 		if ($el[0] && typeof $el.data('cj-nochange') == 'undefined' && !$el.hasClass(ops.statuses[ops.status].addClass)) {
 			ops.statuses = $.extend(true, {}, ops.statuses, $el.data('cj-statuses'))
-			text = ops.statuses[ops.status].text
 			classToAdd = ops.statuses[ops.status].addClass
-			el = $el[0]
 			if (ops.highlight) $el.addClass('tosave')
 			else $el.removeClass('tosave')
-			if ( el.tagName == 'INPUT') el.value = text
+			if ( $el.is('input') ) $el.val(ops.statuses[ops.status].text || '')
 			else $el.text(text)
-			if (el.tagName == 'BUTTON') el.disabled = ops.disabled
+			if ( $el.is('button') ) $el.prop('disabled', ops.disabled)
 		}
-	}
-	this.__proto__.refresh = function(options) {
-		var defs = {
-				selector: _this.options.view,
-				url: window.location.pathname
-			}, ops = $.extend({}, defs, options),
-			SCRIPT_REGEX = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-			selectors = ops.selector.split(',')
-			
-		if (_this.options.debug)
-			console.log('Refreshing '+ops.selector+' with '+ops.url)
-		
-		$.ajax({
-			url: ops.url,
-			type: 'GET',
-			cache: false,
-			dataType: 'text',
-			success: function(data) {
-				var $holder = $('<div>'), 
-					$content
-				while (SCRIPT_REGEX.test(data)) {
-				    data = data.replace(SCRIPT_REGEX, "")
-				}
-				$holder.html(data)
-				for (var i = selectors.length - 1; i >= 0; i--){
-					$content = $holder.find(selectors[i])
-					if (_this.options.debug)
-					if ($content.length > 0)
-						$(selectors[i]).replaceWith($content)
-				}
-				_this._init()
-			}
-		})
-	}
-	this.__proto__.get = function(options, callback) {
-		var ops = {
-			selector: 'form',
-			insertLoc: false,
-			addClass: ''
-		}, $content
-		ops = $.extend({}, ops, options)
-
-		$.ajax({
-			method: 'GET',
-			url: ops.url,
-			dataType: 'text',
-			cache: false,
-			success: function(data) {
-				if (ops.selector)
-					$content = $(ops.selector, data).addClass('temporary none cj-got '+ops.addClass)
-				else
-					$content = $(data)
-				if (ops.insertLoc) {
-					$(ops.insertLoc).prepend($content.addClass('cj-got').css({display:'none'}))
-					$content.slideDown()
-				}
-				else _this.flash({msg: data, html: true, autoRemove: false, mask: true})
-
-				_this._init()
-
-				if (typeof arguments[arguments.length-1] === 'function')
-					arguments[arguments.length-1].call(this, $content);
-			},
-			error: function(xhr, e, msg) {
-				console.log(e)
-				_this.ajaxResponse(xhr)
-			}
-		})
 	}
 	this._binds = function() {
 		_this.bind('click', '[type="submit"]', _this._handlers.whichSubmit)
 		_this.bind('submit', 'form', _this._handlers.submit)
 		_this.bind('click', '[data-cj-get]', _this._handlers.get)
 		_this.bind('keyup', _this._handlers.close)
-		//_this.bind('change', 'input[type="file"]:not([multiple])', _this.util.filePreview)
+		//_this.bind('change', 'input[type="file"]:not([multiple])', _this.handlers.filePreview)
 		_this.bind('click', '[data-cj-delete]', _this._handlers.del)
 		_this.bind('click', '.cj-request', _this._handlers.request)
 		var tags = [ 'input', 'textarea', 'select', 'radio', 'checkbox']
@@ -677,24 +605,6 @@ function cakejax() {
 				|| e.target.id == 'mask')
 				_this.close()
 		},
-		get: function(e) {
-			e.preventDefault()
-			var defs = {
-				insertLoc: false,
-				addClass: null,
-				getOnce: null,
-				selector: null
-			}, $el = $(e.currentTarget), ops = $.extend({}, defs, $el.data('cj-get'))
-			if (!$el.data('cj-got') || !ops.getOnce) {
-				_this.get({
-					url: ops.url,
-					addClass: ops.addClass,
-					insertLoc: ops.insertLoc,
-					selector: ops.selector
-				})
-			}
-			if (ops.getOnce) $el.data('cj-got', true)
-		},
 		change: function(e) {
 			if(e.target.name) {
 				var data = _this.Hash.get($(e.target.form).data('cjRequest'), 'data'),
@@ -734,14 +644,14 @@ function cakejax() {
 			}
 		},
 		whichSubmit: function(e) {
-			$(e.currentTarget).parents('form').first().append($('<input>', {
-				name: e.currentTarget.name,
-				value: e.currentTarget.value,
-				style: 'display:none'
-			}))
-		}
-	}
-	this._util = {
+			if(e.currentTarget.value) {
+				$(e.currentTarget).parents('form').first().append($('<input>', {
+					name: e.currentTarget.name,
+					value: e.currentTarget.value,
+					style: 'display:none'
+				}))
+			}
+		},
 		filePreview: function(e) {
 			var files = e.target.files
 			for (var i=0; f = files[i]; i++) {
@@ -999,11 +909,4 @@ if (!Array.prototype.filter) {
 String.prototype.modelize = function() {
 	var s = this.charAt(0).toUpperCase() + this.slice(1)
 	return s.replace(/(s)$/, '').replace(/_([A-Za-z]{1})/, function(v) {return v.replace('_', '').toUpperCase()}).replace(/ie$/, 'y')
-}
-function objectSize(obj) {
-	var size = 0, key;
-for (key in obj)
-    if (obj.hasOwnProperty(key)) 
-		size++;
-return size;
 }
