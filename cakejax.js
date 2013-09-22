@@ -30,7 +30,6 @@ function cakejax() {
 	this.listeners = {}
 	this.validates = {}
 	this.callbacks = {}
-	this.history = []
 	
 	this.init = function(config) {
 		_this = $.extend(true, {}, _this, config)
@@ -52,7 +51,7 @@ function cakejax() {
 							_this.ck[i] = eds[i].getData()
 							$(eds[i].element.$).trigger('change')
 						}
-					}, 300)
+					}, 300);
 				}
 		}
 		_this.timers = _this.timers || {}
@@ -62,7 +61,7 @@ function cakejax() {
 			$form = $(this)
 			if (!$form.data('cjRequest')) {
 				if (_this.options.debug)
-					console.log('\t\tNow Listening To: '+$(this)[0])
+					console.log('\t\tNow Listening To: '+$(this)[0]);
 				r =  _this.collect($form[0])
 				$form.data('cjRequest', r)
 				// _this.setButton({status: 'beforeChange', disabled: false, scope: $form})
@@ -71,53 +70,45 @@ function cakejax() {
 		})
 	}
 	this.__proto__.collect = function(form) {
-		var defs = {
-				refresh: false,
-			},
-			$form = $(form),
-			ops = $.extend({}, defs, $form.data('cjOptions')),
-			_serialized = [],
-			_serializedDOM = [],
+		var $form = $(form),
+			ops = $.extend({}, {refresh:false,live:false}, $form.data('cjOptions')),
+			_flattened = {},
+			_flattenedDOM = {},
 			r = {
-				data: {},
 				files: [],
-				inputs: {},
 				form: form,
-				url: $form.prop('action'),
+				url: $form.attr('action'),
 				refresh: ops.refresh,
 				live: ops.live,
-				method: $form.attr('method'),
-				params: {}
+				method: $form.attr('method')
 			},
 			inputs = form.elements,
-			obj, obj2
+			obj, obj2, name, idxd
 
 		if (_this.options.debug)
 			console.log('Collecting: #'+$(form).attr('id'), 'Options:', ops)
-			
-		//collect inputs and prepare for expand
+
 		for (var i = 0; i < inputs.length; i++) {
-			if (inputs[i].name && inputs[i].name.indexOf('data') > -1) {
-				if(inputs[i].type === 'checkbox' && !inputs[i].checked)
+			name = inputs[i].getAttribute('name')
+			if (name && name.indexOf('data') > -1 && inputs[i].type !== 'submit') {
+				if (inputs[i].type === 'checkbox' && !inputs[i].checked)
 					continue
-				obj = {}
-				obj[inputs[i].name] = $(inputs[i]).val()
-				_serialized.push(obj)
-				obj2 = {}
-				obj2[inputs[i].name] = inputs[i]
-				_serializedDOM.push(obj2)
+				if (!inputs[name].tagName && inputs[name].length > 1)
+					name = name.replace(/\[.{0}\]/g, function() {return '['+Array.prototype.slice.apply(inputs[name]).indexOf(inputs[i])+']'})
+				_flattenedDOM[name] = inputs[i]
+				_flattened[name] = $(inputs[i]).val()
+				
 			}
 		}
 		
-		r.data = _this.Hash.expand(_serialized)
-		r.inputs = _this.Hash.expand(_serializedDOM)
+		r.data = _this.Hash.expand(_flattened)
+		r.inputs = _this.Hash.expand(_flattenedDOM)
 		
 		$form.data('cjRequest', r)
-		
 		if (_this.options.debug)
 			console.log('#'+$(r.form).attr('id')+' Request:', r)//JSON.stringify(r.data, null, '\t'));
-
-		return typeof r.live !== 'undefined' ? _this.save(r) : r
+			
+		return r.live ? _this.save(r) : r
 	}
 	this.__proto__.save = function(request) {
 		if (!$.isEmptyObject(request.data)) {
@@ -312,40 +303,37 @@ function cakejax() {
 	}
 	this.__proto__.setButton = function(options) {
 		// var defs = {
-	// 			status: 'beforeChange',
-	// 			disabled: false,
-	// 			scope: $('form').first(),
-	// 			statuses: {
-	// 				beforeChange: {text: 'Saved',addClass: 'cj-static'},
-	// 				duringSave: {text: 'Saving...',addClass: 'cj-saving'},
-	// 				beforeSave: {text: 'Save Changes',addClass: 'cj-ready'},
-	// 				afterSave: {text: 'Saved!',addClass: 'cj-saved'},
-	// 				saveFail: {text: 'Retry Save',addClass: 'cj-failed'}
-	// 			}
-	// 		},
-	// 		text,el,ops = $.extend(true, {}, defs, options),
-	// 		classToAdd
-	// 
-	// 	var $el = $('[onclick^="_this.save"], [type="submit"]', ops.scope)
-	// 
-	// 	if ($el[0] && typeof $el.data('cj-nochange') == 'undefined' && !$el.hasClass(ops.statuses[ops.status].addClass)) {
-	// 		ops.statuses = $.extend(true, {}, ops.statuses, $el.data('cj-statuses'))
-	// 		text = ops.statuses[ops.status].text
-	// 		classToAdd = ops.statuses[ops.status].addClass
-	// 		el = $el[0]
-	// 		if (ops.highlight) $el.addClass('tosave')
-	// 		else $el.removeClass('tosave')
-	// 		if ( el.tagName == 'INPUT') el.value = text
-	// 		else $el.text(text)
-	// 		if (el.tagName == 'BUTTON') el.disabled = ops.disabled
-	// 	}
+		// 		status: 'beforeChange',
+		// 		disabled: false,
+		// 		scope: $('form').first(),
+		// 		statuses: {
+		// 			beforeChange: {text: 'Saved',addClass: 'cj-static'},
+		// 			duringSave: {text: 'Saving...',addClass: 'cj-saving'},
+		// 			beforeSave: {text: 'Save Changes',addClass: 'cj-ready'},
+		// 			afterSave: {text: 'Saved!',addClass: 'cj-saved'},
+		// 			saveFail: {text: 'Retry Save',addClass: 'cj-failed'}
+		// 		}
+		// 	},
+		// 	text,el,ops = $.extend(true, {}, defs, options),
+		// 	classToAdd
+		// 
+		// var $el = $('[onclick^="_this.save"], [type="submit"]', ops.scope)
+		// 
+		// if ($el[0] && typeof $el.data('cj-nochange') == 'undefined' && !$el.hasClass(ops.statuses[ops.status].addClass)) {
+		// 	ops.statuses = $.extend(true, {}, ops.statuses, $el.data('cj-statuses'))
+		// 	classToAdd = ops.statuses[ops.status].addClass
+		// 	if (ops.highlight) $el.addClass('tosave')
+		// 	else $el.removeClass('tosave')
+		// 	if ( $el.is('input') ) $el.val(ops.statuses[ops.status].text || '')
+		// 	else $el.text(text)
+		// 	if ( $el.is('button') ) $el.prop('disabled', ops.disabled)
+		// }
 	}
 	this._binds = function() {
 		_this.bind('click', '[type="submit"]', _this._handlers.whichSubmit)
 		_this.bind('submit', 'form', _this._handlers.submit)
-		_this.bind('click', '[data-cj-get]', _this._handlers.get)
 		_this.bind('keyup', _this._handlers.keyup)
-		_this.bind('change', 'input[type="file"]:not([multiple])', _this._handlers.filePreview)
+		//_this.bind('change', 'input[type="file"]:not([multiple])', _this.handlers.filePreview)
 		_this.bind('click', '[data-cj-delete]', _this._handlers.del)
 		_this.bind('click', '.cj-request', _this._handlers.request)
 		var tags = [ 'input', 'textarea', 'select', 'radio', 'checkbox']
@@ -619,12 +607,13 @@ function cakejax() {
 			}
 		},
 		change: function(e) {
-			if(e.target.name) {
-				var data = _this.Hash.get($(e.target.form).data('cjRequest'), 'data'),
-				serialized = [], hold = {}, r
+			var el = e.target, name = el.getAttribute('name')
+			if (name) {
+				var data = _this.Hash.get($(el.form).data('cjRequest'), 'data'),
+				serialized = [], hold = {}
 				clearTimeout(_this.collectTimeout)
 				_this.collectTimeout = setTimeout(function() {
-					_this.collect(e.target.form)
+					_this.collect(el.form)
 				}, 100)
 				_this.setButton({status: 'beforeSave', disabled: false, scope: $(e.target.form)})
 			}
@@ -789,7 +778,7 @@ function cakejax() {
 		},
 		insert: function(data, path, values) {
 			var tokens = this._tokenize(path), token, nextPath, expand = {}
-			if (path.indexOf('{') === -1) {
+			if (path.indexOf('{') === -1 && path.indexOf('[]') === -1) {
 				return this._simpleOp('insert', data, tokens, values)
 			}
 			if (!$.isEmptyObject(data)) {
@@ -825,12 +814,12 @@ function cakejax() {
 			}
 			return data
 		},
-		_simpleOp: function(op, data, tokens, values) {
+		_simpleOp: function(op, data, tokens, value) {
 			var hold = data
 			for (var i = 0; i < tokens.length; i++) {
 				if (op === 'insert') {
-					if (i === tokens.length -1) {
-						hold[tokens[i]] = values
+					if (i === tokens.length-1) {
+						hold[tokens[i]] = value
 						return data
 					}
 					if (typeof hold[tokens[i]] !== 'object') {
@@ -926,4 +915,6 @@ if (!Array.prototype.filter) {
 String.prototype.modelize = function() {
 	var s = this.charAt(0).toUpperCase() + this.slice(1)
 	return s.replace(/(s)$/, '').replace(/_([A-Za-z]{1})/, function(v) {return v.replace('_', '').toUpperCase()}).replace(/ie$/, 'y')
+}
+e(/ie$/, 'y')
 }
