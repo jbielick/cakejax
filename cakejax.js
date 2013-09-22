@@ -833,7 +833,7 @@ function cakejax() {
 						hold[tokens[i]] = values
 						return data
 					}
-					if (typeof hold[tokens[i]] === 'undefined') {
+					if (typeof hold[tokens[i]] !== 'object') {
 						hold[tokens[i]] = {}
 					}
 					hold = hold[tokens[i]]
