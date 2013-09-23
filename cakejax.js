@@ -916,5 +916,3 @@ String.prototype.modelize = function() {
 	var s = this.charAt(0).toUpperCase() + this.slice(1)
 	return s.replace(/(s)$/, '').replace(/_([A-Za-z]{1})/, function(v) {return v.replace('_', '').toUpperCase()}).replace(/ie$/, 'y')
 }
-e(/ie$/, 'y')
-}
