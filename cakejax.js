@@ -480,8 +480,12 @@ function cakejax() {
 		} else {
 			
 		}
-		$response = $($.parseHTML(xhr.responseText, document, true))
+		$response = $('<div>').append($.parseHTML(xhr.responseText, document, true))
+
 		$flashMessage = $response.find('#flashMessage')
+		if($flashMessage === 0) {
+			$flashMessage = $response.filter('#flashMessage')
+		}
 
 		if ($flashMessage.length) {
 			if ($('#flashMessage').length)
