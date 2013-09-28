@@ -1,6 +1,6 @@
 /**==============================================
-* CakeJax v0.5.3 BETA
-* 8/16/2013
+* CakeJax v0.7.3 BETA
+* 9/22/2013
 *
 *  ___ ___    _   ___ __  __ ___ _  _ _____
 * | __| _ \  /_\ / __|  \/  | __| \| |_   _|
@@ -13,11 +13,17 @@
 *==============================================*/
 'use strict';
 
+$.ajaxSetup({
+	headers: { 
+		Accept : 'text/plain, text/html; charset=utf-8'
+	},
+	dataType: 'html text'
+})
+
 function cakejax() {
 	var _this = this
-	this.options = {	
+	this.options = {
 		view: '#view',
-		removeAfter: {},
 		debug: false,
 		enable: 'form.cakejax'
 	}
@@ -27,17 +33,13 @@ function cakejax() {
 		here: window.location.pathname,
 		url: window.location.href
 	}
-	this.listeners = {}
 	this.validates = {}
 	this.callbacks = {}
 	
 	this.init = function(config) {
-		_this = $.extend(true, {}, _this, config)
+		$.extend(true, _this, config)
 		_this._binds()
 		_this._init()
-
-		if (typeof arguments[arguments.length-1] === 'function')
-			arguments[arguments.length-1].call(_this)
 	}
 	this._init = function() {
 		if (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances ) {
@@ -54,22 +56,20 @@ function cakejax() {
 					}, 300);
 				}
 		}
-		_this.timers = _this.timers || {}
-
 		var $forms = $('form'), $form, r
 		$forms.each(function() {
 			$form = $(this)
 			if (!$form.data('cjRequest')) {
 				if (_this.options.debug)
 					console.log('\t\tNow Listening To: '+$(this)[0]);
-				r =  _this.collect($form[0])
+				r =  _this.collect($form[0], true)
 				$form.data('cjRequest', r)
 				// _this.setButton({status: 'beforeChange', disabled: false, scope: $form})
 				_this.callback('init', r)
 			}
 		})
 	}
-	this.__proto__.collect = function(form) {
+	this.collect = function(form, liveOverride) {
 		var $form = $(form),
 			ops = $.extend({}, {refresh:false,live:false}, $form.data('cjOptions')),
 			_flattened = {},
@@ -91,13 +91,15 @@ function cakejax() {
 		for (var i = 0; i < inputs.length; i++) {
 			name = inputs[i].getAttribute('name')
 			if (name && name.indexOf('data') > -1 && inputs[i].type !== 'submit') {
-				if (inputs[i].type === 'checkbox' && !inputs[i].checked)
-					continue
 				if (!inputs[name].tagName && inputs[name].length > 1)
 					name = name.replace(/\[.{0}\]/g, function() {return '['+Array.prototype.slice.apply(inputs[name]).indexOf(inputs[i])+']'})
+				if(inputs[i].type === 'file' && inputs[i].value !== '')
+					r.files.push(inputs[i])
 				_flattenedDOM[name] = inputs[i]
-				_flattened[name] = $(inputs[i]).val()
-				
+				if (inputs[i].type === 'checkbox')
+					_flattened[name] = inputs[i].checked ? 1 : 0
+				else
+					_flattened[name] = $(inputs[i]).val()
 			}
 		}
 		
@@ -108,9 +110,9 @@ function cakejax() {
 		if (_this.options.debug)
 			console.log('#'+$(r.form).attr('id')+' Request:', r)//JSON.stringify(r.data, null, '\t'));
 			
-		return r.live ? _this.save(r) : r
+		return r.live && !liveOverride ? _this.save(r) : r
 	}
-	this.__proto__.save = function(request) {
+	this.save = function(request) {
 		if (!$.isEmptyObject(request.data)) {
 			if (_this.options.debug)
 				console.log('Saving...', request)
@@ -118,20 +120,18 @@ function cakejax() {
 			//_this.flash({msg: 'Saving...', autoRemove: false, addClass: 'save'})
 
 			_this.setButton({status:'duringSave', disabled: true, scope: request.form})
-
+			
 			var ajaxOps = {
 				url: request.url,
 				type: request.method || 'POST',
 				dataType: 'text',
 				cache: false,
 				complete: function(xhr) {
-					_this.ajaxResponse(xhr, request, function(request, success) {
-						_this.callback('afterSave', request)
+					_this.ajaxResponse(xhr, request, function(r, success) {
 						if (success) {
-							_this.setButton({status:'afterSave', disabled: false, highlight: false, scope: request.form})
-							if (request.refresh)
-								_this.refresh(request.refresh)
+							_this.setButton({status:'afterSave', disabled: false, highlight: false, scope: r.form})
 						}
+						return _this.callback('afterSave', r)
 					})
 				}
 			}
@@ -220,19 +220,19 @@ function cakejax() {
 			}
 		}
 	}
-	this.__proto__.callback = function(method, arg) {
+	this.callback = function(method, arg) {
 		var $form = (arg.form) ? $(arg.form) : arg, model
 		if (typeof arg.data == 'object') {
 			try {
 				if ($form) {
 					for(var selector in _this.callbacks)
 						if (_this.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in _this.callbacks[selector] ) && typeof _this.callbacks[selector][method] === 'function' )
-							if (_this.callbacks[selector][method](arg) === false)
+							if (_this.callbacks[selector][method].call(_this, arg) === false)
 								return false
 				}
 				for (model in arg.data)
 					if (arg.data.hasOwnProperty(model) && model in _this.callbacks && method in _this.callbacks[model]) {
-						var returned = _this.callbacks[model][method](arg)
+						var returned = _this.callbacks[model][method].call(_this, arg)
 						if (returned === false)
 							return false
 						else if (method === 'beforeSave')
@@ -256,7 +256,7 @@ function cakejax() {
 			return true
 		}
 	}
-	this.__proto__.del = function(params) {
+	this.del = function(params) {
 		var item = params.item || 'this item',
 			refresh = params.refresh || false,
 			$caller = $(params.caller),
@@ -285,23 +285,23 @@ function cakejax() {
 					cache: false,
 					complete: function(xhr) {
 						_this.ajaxResponse(xhr, request, function(request, success) {
-							_this.callback('afterSave', request)
+							var callbackReturn = _this.callback('afterSave', request), $deletable
 							if (success) {
-								var $deletable = $caller.parents('.deletable').first()
+								$deletable = $caller.parents('.deletable').first()
 								if (!$deletable[0])
 									$deletable = $caller.parents('tr').first()
-
 								$deletable.fadeOut(function(){$deletable.remove()})
 								if (refresh)
 									_this.refresh(refresh)
 							}
+							return callbackReturn
 						})
 					}
 				})
 			}
 		}
 	}
-	this.__proto__.setButton = function(options) {
+	this.setButton = function(options) {
 		// var defs = {
 		// 		status: 'beforeChange',
 		// 		disabled: false,
@@ -333,17 +333,18 @@ function cakejax() {
 		_this.bind('click', '[type="submit"]', _this._handlers.whichSubmit)
 		_this.bind('submit', 'form', _this._handlers.submit)
 		_this.bind('keyup', _this._handlers.keyup)
-		//_this.bind('change', 'input[type="file"]:not([multiple])', _this.handlers.filePreview)
+		_this.bind('change', 'input[type="file"]:not([multiple])', _this._handlers.filePreview)
 		_this.bind('click', '[data-cj-delete]', _this._handlers.del)
+		_this.bind('click', '[data-cj-get]', _this._handlers.get)
 		_this.bind('click', '.cj-request', _this._handlers.request)
 		var tags = [ 'input', 'textarea', 'select', 'radio', 'checkbox']
 		$(document).off('change keyup input', tags.join(', '), _this._handlers.change)
 		_this.bind('change keyup input', tags.join(', '), _this._handlers.change)
 	}
-	this.__proto__.bind = function() {
+	this.bind = function() {
 		$.fn.on.apply($(document), Array.prototype.slice.call(arguments))
 	}
-	this.__proto__.transport = {
+	this.transport = {
 		buildIframe: function(id, uri) {
 			var id = 'cjTransportFrame-'+id,
 				$iframe = $('<iframe id="'+id+'" name="'+id+'" style="position:absolute; top:-9999px; left:-9999px" />')
@@ -440,15 +441,13 @@ function cakejax() {
 			return {abort: function () {}}
 		}
 	}
-	this.__proto__.ajaxResponse = function(xhr, request) {
-		var $oldForm = $(request.form),
-			$holding = $('<div>'),
+	this.ajaxResponse = function(xhr, r) {
+		var $oldForm = $(r.form),
 			replace = '.save',
 			$response,
 			$flashMessage,
 			success = true,
-			stop = false,
-			$freshForm,
+			continu = true,
 			$newForm
 			
 		// if (xhr.status == 403) {
@@ -466,8 +465,6 @@ function cakejax() {
 // 			})
 // 			return false
 // 		}
-		if (request)
-			request.xhr = xhr
 		
 		if (/^2/.test(xhr.status)) {
 			
@@ -478,43 +475,59 @@ function cakejax() {
 		} else {
 			
 		}
- 
-		$response = $holding.html(xhr.responseText)
-	
+		$response = $('<div>').append($.parseHTML(xhr.responseText, document, true))
+
 		$flashMessage = $response.find('#flashMessage')
+		if($flashMessage === 0) {
+			$flashMessage = $response.filter('#flashMessage')
+		}
 
 		if ($flashMessage.length) {
 			if ($('#flashMessage').length)
-				$('#flashMessage').remove()
-			$(_this.options.view).prepend($flashMessage)
+				$('#flashMessage').replaceWith($flashMessage)
+			else
+				$(_this.options.view).prepend($flashMessage)
 		}
 
-		var logs = (cj.options.debug) ? 'pre.cake-error, .notice, p.error' : 'pre.cake-error, .notice, p.error, pre',
+		var logs = (cj.options.debug) ? 'pre, pre.cake-error, .notice, p.error' : 'pre.cake-error, .notice, p.error',
 			$notices = $response.find(logs),
 			errors = '<pre>';
 
 		if ($notices.length > 0) {
 			$notices.each(function() {
 				errors += '\t'+$notices.text()+'<br><br>'
-			});
+			})
 			errors += '</pre>'
-			console.log(errors)
-			cj.flash({msg:errors, html: true, autoRemove: false, mask:true})
+			cj.flash({msg: errors, html: true, autoRemove: false, mask:true})
 			success = false
 		}
-
-		if ($oldForm) {
-			$freshForm = $response.find('#'+$oldForm[0].id)
-			if ($freshForm.length) {
-				$oldForm.replaceWith($freshForm.addClass('cj-replaced'))
-				cj._init()
+		
+		if (r) {
+			r.xhr = xhr
+			r.flash = $flashMessage.get(0)
+		}
+		
+		if (typeof arguments[arguments.length-1] === 'function')
+			continu = arguments[arguments.length-1].call(_this, r, success)
+			
+		if(r && r.refresh) {
+			var selectors = r.refresh.selector.split(', ')
+			for (var i = 0; i < selectors.length; i++) {
+				var $content = $response.find(selectors[i])
+				if($content.length > 0)
+					$(selectors[i]).replaceWith($content)
 			}
 		}
-		if (typeof arguments[arguments.length-1] === 'function')
-			arguments[arguments.length-1].call(this, request, success)
-		
+
+		if(continu !== false && $oldForm) {
+			$newForm = $response.find('#'+$oldForm.attr('id'))
+			if ($newForm.length) {
+				$oldForm.replaceWith($newForm.addClass('cj-replaced'))
+			}
+		}
+		cj._init()
 	}
-	this.__proto__.flash = function(options) {
+	this.flash = function(options) {
 		var modalCount = $('.flashMessageModal [id^="flashMessage-"]').length,
 			defs = {
 				msg: 'No message supplied',
@@ -586,10 +599,69 @@ function cakejax() {
 			}, ops.linger);
 		}
 	}
-	this.__proto__.close = function() {
-		$('.flashMessageModal, #mask').each(function(){
-			$(this).fadeOut('fast',function(){$(this).remove()})
+	this.get = function(options, callback) {
+		var ops = {
+			selector: 'form',
+			insertLoc: false,
+			addClass: ''
+		}, $content
+		ops = $.extend({}, ops, options)
+ 
+		$.ajax({
+			method: 'GET',
+			url: ops.url,
+			cache: false,
+			complete: function(xhr) {
+				var $view = $($.parseHTML(xhr.responseText, document, true))
+				if(ops.selector)
+					$content = $view.find(ops.selector).addClass('temporary none cj-got '+ops.addClass)
+				else
+					$content = $view
+				if(ops.insertLoc) {
+					$(ops.insertLoc).prepend($content.addClass('cj-got').css({display:'none'}))
+					$content.slideDown()
+				}
+				else _this.flash({msg: $view.html(), html: true, autoRemove: false, mask: true})
+ 
+				_this._init()
+			}
 		})
+	}
+	this.refresh = function(options) {
+		// var defs = {
+		// 		selector: _this.options.view,
+		// 		url: window.location.pathname
+		// 	}, ops = $.extend({}, defs, options),
+		// 	SCRIPT_REGEX = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+		// 	selectors = ops.selector.split(',')
+		// 	
+		// if(_this.options.debug)
+		// 	console.log('Refreshing '+ops.selector+' with '+ops.url)
+		// 
+		// $.ajax({
+		// 	url: ops.url,
+		// 	type: 'GET',
+		// 	cache: false,
+		// 	dataType: 'text',
+		// 	success: function(data) {
+		// 		var $holder = $('<div>'), 
+		// 			$content
+		// 		while (SCRIPT_REGEX.test(data)) {
+		// 		    data = data.replace(SCRIPT_REGEX, "")
+		// 		}
+		// 		$holder.html(data)
+		// 		for (var i = selectors.length - 1; i >= 0; i--){
+		// 			$content = $holder.find(selectors[i])
+		// 			if(_this.options.debug)
+		// 			if($content.length > 0)
+		// 				$(selectors[i]).replaceWith($content)
+		// 		}
+		// 		_this._init()
+		// 	}
+		// })
+	}
+	this.close = function() {
+		$('.flashMessageModal, #mask').each(function(){$(this).fadeOut('fast',function(){$(this).remove()})})
 	}
 	this._handlers = {
 		del: function(e) {
@@ -604,6 +676,24 @@ function cakejax() {
 			if(e.keyCode === 27) {
 				if (e.target.className.indexOf('modal-close') > -1 || e.target.id == 'mask')
 					_this.close()
+			}
+		},
+		get: function(e) {
+			e.preventDefault()
+			var defs = {
+				insertLoc: false,
+				addClass: null,
+				getOnce: null,
+				selector: null
+			}, $el = $(e.currentTarget), ops = $.extend({}, defs, $el.data('cj-get'))
+			if(!$el.data('cj-got') || !ops.getOnce) {
+				$el.data('cj-got', true)
+				_this.get({
+					url: ops.url,
+					addClass: ops.addClass,
+					insertLoc: ops.insertLoc,
+					selector: ops.selector
+				})
 			}
 		},
 		change: function(e) {
@@ -656,27 +746,29 @@ function cakejax() {
 		},
 		filePreview: function(e) {
 			var files = e.target.files, f
-			for (var i=0; f = files[i]; i++) {
-				if (!f.type.match('image.*'))
-					continue
-				var reader = new FileReader()
-				reader.onload = (function(theFile) {
-					return function(evt) {
-						$(e.target).css({
-							backgroundImage: 'url('+evt.target.result+')',
-							backgroundRepeat: 'no-repeat',
-							backgroundSize: 'cover'
-						})
-						.siblings('label').text('File: '+theFile.name)
-						var $p = $('<img src="'+evt.target.result+'" alt="Image Preview">')
-						return $p
-					}
-				})(f);
-				reader.readAsDataURL(f)
+			if(window.FileReader) {
+				for (var i=0; f = files[i]; i++) {
+					if (!f.type.match('image.*'))
+						continue
+					var reader = new FileReader()
+					reader.onload = (function(theFile) {
+						return function(evt) {
+							$(e.target).css({
+								backgroundImage: 'url('+evt.target.result+')',
+								backgroundRepeat: 'no-repeat',
+								backgroundSize: 'cover'
+							})
+							.siblings('label').text('File: '+theFile.name)
+							var $p = $('<img src="'+evt.target.result+'" alt="Image Preview">')
+							return $p
+						}
+					})(f)
+					reader.readAsDataURL(f)
+				}
 			}
 		}
 	},
-	this.__proto__.Hash = {
+	this.Hash = {
 		extract: function(data, path) {
 			if(!new RegExp('[{\[]').test(path))
 				return this.get(data, path) || []
@@ -883,6 +975,9 @@ function cakejax() {
 
 var cj = cj || new cakejax()
 
+if (!Array.prototype.map) {
+	Array.prototype.map=function(a,t){for(var c=this,b=c.length,d=[],e=0;e<b;)e in c&&(d[e]=a.call(t,c[e],e++,c));d.lengh=b;return d}
+}
 if (!Array.prototype.indexOf) { 
 	Array.prototype.indexOf = function(obj, start) {
 		for (var i = (start || 0), j = this.length; i < j; i++) {
@@ -915,6 +1010,4 @@ if (!Array.prototype.filter) {
 String.prototype.modelize = function() {
 	var s = this.charAt(0).toUpperCase() + this.slice(1)
 	return s.replace(/(s)$/, '').replace(/_([A-Za-z]{1})/, function(v) {return v.replace('_', '').toUpperCase()}).replace(/ie$/, 'y')
-}
-e(/ie$/, 'y')
 }
