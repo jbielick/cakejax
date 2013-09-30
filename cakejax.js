@@ -224,7 +224,7 @@ function cakejax() {
 		var $form = (arg.form) ? $(arg.form) : arg, model
 		if (typeof arg.data == 'object') {
 			try {
-				if ($form) {
+				if ($form.jQuery) {
 					for(var selector in _this.callbacks)
 						if (_this.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in _this.callbacks[selector] ) && typeof _this.callbacks[selector][method] === 'function' )
 							if (_this.callbacks[selector][method].call(_this, arg) === false)
@@ -288,9 +288,9 @@ function cakejax() {
 							var callbackReturn = _this.callback('afterSave', request), $deletable
 							if (success) {
 								$deletable = $caller.parents('.deletable').first()
-								if (!$deletable[0])
+								if (!$deletable.get(0))
 									$deletable = $caller.parents('tr').first()
-								$deletable.fadeOut(function(){$deletable.remove()})
+								$deletable.hide(200,function(){$deletable.remove()})
 								if (refresh)
 									_this.refresh(refresh)
 							}
@@ -340,6 +340,14 @@ function cakejax() {
 		var tags = [ 'input', 'textarea', 'select', 'radio', 'checkbox']
 		$(document).off('change keyup input', tags.join(', '), _this._handlers.change)
 		_this.bind('change keyup input', tags.join(', '), _this._handlers.change)
+		
+		$(document)
+			.ajaxStart(function() {
+				$('<div class="loading none">').append('<i class="i-spin5 animate-spin">').css({position:'absolute',top:'1%',right:'1%',color:'white',zIndex:'10',fontSize:'35px'}).appendTo($(document.body)).fadeIn(150)
+			})
+			.ajaxComplete(function() {
+				$('.loading').fadeOut(150, function(){$(this).remove()})
+			})
 	}
 	this.bind = function() {
 		$.fn.on.apply($(document), Array.prototype.slice.call(arguments))
