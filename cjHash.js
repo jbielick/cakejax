@@ -40,12 +40,16 @@ this.Hash = {
 			for (var path in curr) if(curr.hasOwnProperty(path)) {
 				tokens = this._tokenize(path).reverse()
 				val = typeof curr[path] === 'function' ? curr[path]() : curr[path]
-				if (tokens[0] === '' || tokens[0] === '{n}') {
+				if (tokens[0] === '{n}') {
 					child = []
 					if (typeof val === 'object')
 						child = val || ''
-					else
-						$.merge(child, val)
+					else {
+						if ($.isArray(val))
+							$.merge(child, val)
+						else
+							child.push(val)
+					}
 				} else {
 					child = {}
 					child[tokens[0]] = val
@@ -63,9 +67,9 @@ this.Hash = {
 		}
 		return out
 	},
-	get: function(data, path, delimiter) {
+	get: function(data, path) {
 		var out = data,
-			tokens = this._tokenize(path, delimiter)
+			tokens = this._tokenize(path)
 		for (var i = 0; i < tokens.length; i++) {
 			if (typeof out === 'object' && typeof out[tokens[i]] !== 'undefined')
 				out = out[tokens[i]]
@@ -75,14 +79,18 @@ this.Hash = {
 		return out
 	},
 	merge: function() {
-		var obs = Array.prototype.slice.call(arguments),
-			out = obs.shift()
+		var obs = Array.prototype.slice.call(arguments), out, dest = false
+		
+		if (typeof arguments[0] === 'boolean')
+			dest = obs.shift()
+			
+		out = obs.shift()
 		for (var i = 0; i < obs.length; i++) {
 			for (var key in obs[i]) if (obs[i].hasOwnProperty(key)) {
 				//for the love of god, please don't traverse DOM nodes
 				if (typeof obs[i][key] === 'object' && out[key] && !out.nodeType && !obs[i][key].nodeType)
-					out[key] = this.merge(out[key], obs[i][key])
-				else if (Number(key) % 1 === 0 && out.forEach)
+					out[key] = this.merge(dest, out[key], obs[i][key])
+				else if (Number(key) % 1 === 0 && $.isArray(out) && $.isArray(obs[i]) && !dest)
 					out.push(obs[i][key])
 				else
 					out[key] = obs[i][key] // but you can store them, k?
@@ -92,7 +100,7 @@ this.Hash = {
 	},
 	insert: function(data, path, values) {
 		var tokens = this._tokenize(path), token, nextPath, expand = {}
-		if (path.indexOf('{') === -1) {
+		if (path.indexOf('{') === -1 && path.indexOf('[]') === -1) {
 			return this._simpleOp('insert', data, tokens, values)
 		}
 		if (!$.isEmptyObject(data)) {
@@ -128,15 +136,15 @@ this.Hash = {
 		}
 		return data
 	},
-	_simpleOp: function(op, data, tokens, values) {
+	_simpleOp: function(op, data, tokens, value) {
 		var hold = data
 		for (var i = 0; i < tokens.length; i++) {
 			if (op === 'insert') {
-				if (i === tokens.length -1) {
-					hold[tokens[i]] = values
+				if (i === tokens.length-1) {
+					hold[tokens[i]] = value
 					return data
 				}
-				if (typeof hold[tokens[i]] === 'undefined') {
+				if (typeof hold[tokens[i]] !== 'object') {
 					hold[tokens[i]] = {}
 				}
 				hold = hold[tokens[i]]
@@ -153,6 +161,43 @@ this.Hash = {
 		}
 	},
 	_tokenize: function(path) {
-		return ( (path.indexOf('data[') > -1) ? path.replace(/^data\[|^\[/, '').replace(/\]$/, '').replace(/\]\[/g, '.') : path ).split('.')
+		if (path.indexOf('data[') === -1) {
+			return path.split('.')
+		} else {
+			return path.replace(/^data/, '').replace(/^\[|\]$/g, '').split('][').map(function(v) {return v === '' ? '{n}' : v })
+		}
+	},
+	flatten: function(data, separator, wrap) {
+		var path = '', stack = [], out = {}, key, el, curr, 
+			separator = separator ? separator : '.', data = JSON.parse(JSON.stringify(data))
+		while (!$.isEmptyObject(data)) {
+			key = this.keys(data)[0]
+			el = data[key]
+			delete data[key]
+			if (typeof el !== 'object') {
+				if(wrap)
+					out['data['+path+key+']'] = el
+				else
+					out[path + key] = el
+			}
+			else {
+				if (!$.isEmptyObject(data)) {
+					stack.push([data,path])
+				}
+				data = el
+				path += key + separator
+			}
+			if ($.isEmptyObject(data) && !$.isEmptyObject(stack)) {
+				curr = stack.pop()
+				data = curr[0], path = curr[1]
+			}
+		}
+		return out
+	},
+	keys: function(obj) {
+		var keys = []
+		for (var key in obj) if (obj.hasOwnProperty(key))
+			keys.push(key)
+		return keys
 	}
 }
