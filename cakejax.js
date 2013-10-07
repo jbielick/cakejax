@@ -64,7 +64,7 @@ function cakejax() {
 		cj.bind('change', 'input[type="file"]:not([multiple])', cj._handlers.filePreview)
 		cj.bind('click', '[cj-delete]', cj._handlers.del)
 		cj.bind('click', '[cj-get]', cj._handlers.get)
-		cj.bind('click', '.cj-request', cj._handlers.request)
+		cj.bind('click', '[cj-request]', cj._handlers.request)
 		var tags = [ 'input', 'textarea', 'select', 'radio', 'checkbox']
 		$(document).off('change keyup input', tags.join(', '), cj._handlers.change)
 		cj.bind('change keyup input', tags.join(', '), cj._handlers.change)
@@ -93,7 +93,7 @@ function cakejax() {
 				live: ops.live || false,
 				method: $ctrl.attr('method') || 'POST'
 			},
-			inputs = $ctrl.is('form') ? ctrl.elements : $ctrl.find('[data-name]'),
+			inputs = $ctrl.is('form') ? ctrl.elements : $ctrl.find('[cj-name]'),
 			obj, obj2, name, idxd
 
 		for (var i = 0; i < inputs.length; i++) {
@@ -160,10 +160,8 @@ function cakejax() {
 						errors[model] = error
 				}
 			}
-			console.log(errors)
 			if (Hash.keys(errors).length) {
 				errors = Hash.flatten(errors, '.', 2)
-				console.log(errors)
 				for (var name in errors) if (errors.hasOwnProperty(name)) {
 					cj._validate.displayError(errors[name].input, errors[name].message)
 				}
@@ -277,10 +275,11 @@ function cakejax() {
 			if (r.method.toLowerCase() === 'post' && xhr.responseJSON._validationErrors) {
 				var vErrors = Hash.flatten(xhr.responseJSON._validationErrors, '][', 2, true), inputs = Hash.flatten(r.inputs, '][', false, true)
 				for (var name in vErrors) if (vErrors.hasOwnProperty(name)) {
-					for (var iname in inputs) if (inputs.hasOwnProperty(iname)) {
-						if (name.replace(new RegExp('\[[0-9]{1,}\]$'), '') === iname)
-							cj._validate.displayError(inputs[iname], vErrors[name])
-					}
+					var iname = name.replace(new RegExp('\[[0-9]{1,}\]$'), '')
+					if(iname in inputs)
+						for (var i = 0; i < vErrors[name].length; i++) {
+							cj._validate.displayError(inputs[iname], vErrors[name][i])
+						}
 				}
 			}
 			
@@ -432,7 +431,7 @@ Function.prototype.callWithCopy = function() {var args = Array.prototype.slice.c
 String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + this.slice(1);return s.replace(/(s)$/, '').replace(/_([A-Za-z]{1})/, function(v) {return v.replace('_', '').toUpperCase()}).replace(/ie$/, 'y')}
 
 // Hash
-;var Hash = new function($) {
+;var Hash = new function() {
 	var Hash = {
 		extract: function(data, path) {
 			if(!new RegExp('[{\[]').test(path))
@@ -472,7 +471,7 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 			
 			for (var i = 0; i < data.length; i++) {
 				curr = data[i]
-				for (var path in curr) if(curr.hasOwnProperty(path)) {
+				for (var path in curr) if (curr.hasOwnProperty(path)) {
 					tokens = Hash._tokenize(path).reverse()
 					val = typeof curr[path] === 'function' ? curr[path]() : curr[path]
 					if (tokens[0] === '{n}' || !isNaN(Number(tokens[0])) ) {
@@ -481,7 +480,7 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 							child = val || ''
 						else {
 							if (Array.isArray(val))
-								$.merge(child, val)
+								Hash.merge(true, child, val)
 							else
 								child.push(val)
 						}
@@ -538,7 +537,7 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 			if (path.indexOf('{') === -1 && path.indexOf('[]') === -1) {
 				return Hash._simpleOp('insert', data, tokens, values)
 			}
-			if (!$.isEmptyObject(data)) {
+			if (Hash.keys(data).length) {
 				token = tokens.shift()
 				nextPath = tokens.join('.')
 				for (var key in data) if (data.hasOwnProperty(key)) {
@@ -606,43 +605,46 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 			return Function.callWithCopy.apply(Hash._flatten, arguments)
 		},
 		_flatten: function(data, separator, limit, wrap) {
-			var path = '', stack = [], out = {}, key, el, curr, i = 1,
+			var path = '', stack = [], out = {}, key, el, curr, i = 1, z = 1,
 				separator = separator || '.', limit = limit || false, wrap = wrap || false
-			while (!$.isEmptyObject(data) || (Array.isArray(data) && data.length) ) {
+			while ( Hash.keys(data).length || (Array.isArray(data) && data.length) ) {
 				key = Hash.keys(data)[0]
 				el = data[key]
 				delete data[key]
-				if (typeof el !== 'object' || el.nodeType || i>=limit) {
+				if (z == limit || typeof el !== 'object' || el == null || el.nodeType) {
 					if(wrap)
-						out['data['+path+key+']'] = el
+						out['data['+path+key+']'] = el || ''
 					else
-						out[path + key] = el
-					i=1
+						out[path + key] = el || ''
 				}
 				else {
-					if (!$.isEmptyObject(data)) {
+					if (Hash.keys(data).length > 0) {
 						stack.push([data,path])
 					}
 					data = el
+					z++
 					path += key + separator
 				}
-				if ($.isEmptyObject(data) && stack.length) {
+				if (Hash.keys(data).length === 0 && stack.length) {
+					z = 1
 					curr = stack.pop()
 					data = curr[0], path = curr[1]
-					i--
 				}
-				i++
 			}
 			return out
 		},
 		keys: function(obj) {
 			var keys = []
-			for (var key in obj) if (obj.hasOwnProperty(key))
-				keys.push(key)
+			if (Array.isArray(obj)) {
+				obj.map(function(v, i) {keys.push(i)})
+			} else {
+				for (var key in obj) if (obj.hasOwnProperty(key))
+					keys.push(key)
+			}
 			return keys
 		}
 	}
 	return Hash
-}(jQuery)
+}()
 
 var cj = cj || new cakejax()
