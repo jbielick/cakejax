@@ -476,27 +476,20 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 					val = typeof curr[path] === 'function' ? curr[path]() : curr[path]
 					if (tokens[0] === '{n}' || !isNaN(Number(tokens[0])) ) {
 						child = []
-						if (typeof val === 'object')
-							child = val || ''
-						else {
-							if (Array.isArray(val))
-								Hash.merge(true, child, val)
-							else
-								child.push(val)
-						}
+						child[tokens[0]] = val
 					} else {
 						child = {}
 						child[tokens[0]] = val
 					}
 					tokens.shift()
 					for (var z = 0; z < tokens.length; z++) {
-						if (tokens[z] === '' || tokens[z] === '{n}' || !isNaN(Number(tokens[z])))
-							parent = [], parent.push(child)
+						if (tokens[z] === '{n}' || !isNaN(Number(tokens[z])))
+							parent = [], parent[tokens[z]] = child
 						else
 							parent = {}, parent[tokens[z]] = child
 						child = parent
 					}
-					out = Hash.merge(out, child)
+					out = Hash.merge(false, out, child)
 				}
 			}
 			return out
@@ -521,13 +514,10 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 			out = obs.shift()
 			for (var i = 0; i < obs.length; i++) {
 				for (var key in obs[i]) if (obs[i].hasOwnProperty(key)) {
-					//for the love of god, please don't traverse DOM nodes
-					if (typeof obs[i][key] === 'object' && out[key] && !out.nodeType && !obs[i][key].nodeType)
+					if (typeof obs[i][key] === 'object' && out[key] && !obs[i][key].nodeType)
 						out[key] = Hash.merge(dest, out[key], obs[i][key])
-					else if (Number(key) % 1 === 0 && Array.isArray(out) && Array.isArray(obs[i]) && !dest)
-						out.push(obs[i][key])
 					else
-						out[key] = obs[i][key] // but you can store them, k?
+						out[key] = obs[i][key]
 				}
 			}
 			return out
@@ -604,14 +594,21 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 		flatten: function() {
 			return Function.callWithCopy.apply(Hash._flatten, arguments)
 		},
-		_flatten: function(data, separator, limit, wrap) {
-			var path = '', stack = [], out = {}, key, el, curr, i = 1, z = 1,
-				separator = separator || '.', limit = limit || false, wrap = wrap || false
-			while ( Hash.keys(data).length || (Array.isArray(data) && data.length) ) {
-				key = Hash.keys(data)[0]
-				el = data[key]
-				delete data[key]
-				if (z == limit || typeof el !== 'object' || el == null || el.nodeType) {
+		_flatten: function(data, separator, limit) {
+			var path = '', stack = [], out = {}, key, el, curr,
+				separator = separator || '.', limit = limit || false, wrap = separator === ']['
+			while (Hash.keys(data).length || (Array.isArray(data) && data.length) ) {
+				if (Array.isArray(data)) {
+					key = data.length-1
+					el = data.pop()
+				}
+				else {
+					key = Hash.keys(data)[0]
+					el = data[key]
+					delete data[key]
+				}
+				
+				if (path.split(separator).length === limit || typeof el !== 'object' || el == null || el.nodeType) {
 					if(wrap)
 						out['data['+path+key+']'] = el || ''
 					else
@@ -622,11 +619,9 @@ String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + t
 						stack.push([data,path])
 					}
 					data = el
-					z++
 					path += key + separator
 				}
 				if (Hash.keys(data).length === 0 && stack.length) {
-					z = 1
 					curr = stack.pop()
 					data = curr[0], path = curr[1]
 				}
