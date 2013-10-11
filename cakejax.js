@@ -217,7 +217,7 @@ function cakejax() {
 			alphaNumeric: function(i) {return !new RegExp('[^a-z0-9]+', 'ig').test(i)},
 			numeric: function(i) {return !new RegExp('[^0-9]+', 'g').test(i)},
 			email: function(i) {return new RegExp('^([A-Za-z0-9_\-\.\+])+\@([A-Za-z0-9_\-\.])+\.([A-Za-z]{2,4})$').test(i)},
-			url: function(i) {return new RegExp('(http[s]?:\/\/){1}((([a-z\d]([a-z\d-]*[a-z\d])*)\.)+[a-z]{2,}|((\d{1,3}\.){3}\d{1,3}))(\:\d+)?(\/[-a-z\d%_.~+]*)*(\?[;&a-z\d%_.~+=-]*)?(\#[-a-z\d_]*)?', 'i').test(i)}
+			url: function(i) {return /(http|https):\/\/([a-z0-9\-]{2,})?(\.[a-z0-9\-]+)*(\.[a-z]{2,4})+(\/[a-z0-9\-~\.:%#]+\/?)*((\?[a-z0-9\-]+)?(&[a-z0-9%;\-:=]+))*/ig.test(i)}
 		}
 	}
 	this.callback = function(method, r, xhr) {
