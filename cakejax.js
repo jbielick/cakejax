@@ -16,32 +16,40 @@ function cakejax() {
 	var cj = this
 	this.options = {
 		debug: true,
-		enable: 'form.cakejax, [cj-controller]'
+		enable: 'form.cakejax, [cj-controller]',
+		dataType: 'json'
 	}
 	this.ajaxSetup = {
-		headers: { 
-			Accept : 'application/json, application/javascript',
-			'Content-Type': 'application/json'
-		},
 		cache: false,
-		processData: false,
-		dataType: 'json',
-		beforeSend: function(xhr, request) {
-			if(request.data && request.type.toLowerCase() === 'post') {
-				try {
-					request.data = JSON.stringify(request.data)
-				} catch(e) {
-					
-				}
-			}
-			request.url += '.json'
-		}
+		dataType: 'html'
 	}
-	this.callbacks = {},
+	this.callbacks = {}
 	this.validate = {}
+	this.views = {}
+	
 	this.xhr = $.ajax
 	cj.init = function(config) {
 		$.extend(true, cj, config)
+		if (this.options.dataType === 'json') {
+			Hash.merge(true, this.ajaxSetup, {
+				headers: { 
+					Accept: 'application/json, application/javascript',
+					'Content-Type': 'application/json'
+				},
+				dataType: 'json',
+				beforeSend: function(xhr, request) {
+					if(request.data && request.type.toLowerCase() === 'post') {
+						try {
+							request.data = JSON.stringify(request.data)
+						} catch(e) {
+							return false
+						}
+					}
+					request.url += '.json'
+				},
+				processData: false
+			})
+		}
 		cj._binds()
 		cj._init()
 	}
@@ -51,7 +59,6 @@ function cakejax() {
 			if (!$(this).data('cjRequest')) {
 				r =  cj.collect($(this).get(0), true)
 				$(this).data('cjRequest', r)
-				// cj.setButton({status: 'beforeChange', disabled: false, scope: $(this)})
 				cj.callback('init', r)
 			}
 		})
@@ -222,17 +229,17 @@ function cakejax() {
 	}
 	this.callback = function(method, r, xhr) {
 		var $ctrl = (r.controller) ? $(r.controller) : r, model
-		if (typeof r.data == 'object') {
+		if (typeof r.data === 'object') {
 			try {
 				if ($ctrl.jQuery) {
 					for(var selector in cj.callbacks)
 						if (cj.callbacks.hasOwnProperty(selector) && $ctrl.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] === 'function' )
-							if (cj.callbacks[selector][method].call(r, xhr) === false)
+							if (cj.callbacks[selector][method].call(this, r, xhr) === false)
 								return false
 				}
 				for (model in r.data)
 					if (r.data.hasOwnProperty(model) && model in cj.callbacks && method in cj.callbacks[model]) {
-						var returned = cj.callbacks[model][method].call(r, xhr)
+						var returned = cj.callbacks[model][method].call(this, r, xhr)
 						if (returned === false)
 							return false
 						else if (method === 'beforeSave')
@@ -242,7 +249,7 @@ function cakejax() {
 					}
 				if (method.toLowerCase().indexOf('delete') > -1) {
 					model = cj.params.controller.modelize()
-					if (cj.callbacks[model] && cj.callbacks[model][method] && cj.callbacks[model][method].call(r, xhr) === false) {
+					if (cj.callbacks[model] && cj.callbacks[model][method] && cj.callbacks[model][method].call(this, r, xhr) === false) {
 						return false
 					}
 				}
@@ -257,10 +264,11 @@ function cakejax() {
 		}
 	}
 	this.parseResponse = function(r, xhr) {
+		var dom
 		try {
 			xhr.responseJSON = JSON.parse(xhr.responseText)
 		} catch(e) {
-			
+			xhr.responseJSON = null
 		}
 		
 		if (xhr.responseJSON) {
@@ -283,10 +291,33 @@ function cakejax() {
 				}
 			}
 			
+		} else {
+			try {
+				dom = $($.parseHTML(xhr.responseText, document, false)).appendTo('<div>')
+			} catch (e) {
+				
+			}
 		}
 		
 		if (typeof arguments[arguments.length - 1] === 'function')
 			arguments[arguments.length - 1](r, xhr)
+	}
+	this.render = function(view, data) {
+		var $els, $fields
+		if (Hash.get(cj.views, view)) {
+			var $els = $($.parseHTML(Hash.get(cj.views, view), document, false))
+			$els.each(function() {
+				$fields = $(this).find('[cj-field]')
+				$fields.each(function() {
+					$(this).text(Hash.get(data, $(this).attr('cj-field')))
+				})
+			})
+			if (typeof arguments[arguments.length-1] === 'function')
+				arguments[arguments.length-1].call(cj, $els)
+			return $els
+		} else {
+			throw new Error('Reference to undefined view "'+view+'"')
+		}
 	}
 	this._handlers = {
 		del: function(e) {
