@@ -25,7 +25,7 @@ function cakejax() {
 	}
 	this.callbacks = {}
 	this.validate = {}
-	this.views = {}
+	this.elements = {}
 	
 	this.xhr = $.ajax
 	cj.init = function(config) {
@@ -302,23 +302,6 @@ function cakejax() {
 		if (typeof arguments[arguments.length - 1] === 'function')
 			arguments[arguments.length - 1](r, xhr)
 	}
-	this.render = function(view, data) {
-		var $els, $fields
-		if (Hash.get(cj.views, view)) {
-			var $els = $($.parseHTML(Hash.get(cj.views, view), document, false))
-			$els.each(function() {
-				$fields = $(this).find('[cj-field]')
-				$fields.each(function() {
-					$(this).text(Hash.get(data, $(this).attr('cj-field')))
-				})
-			})
-			if (typeof arguments[arguments.length-1] === 'function')
-				arguments[arguments.length-1].call(cj, $els)
-			return $els
-		} else {
-			throw new Error('Reference to undefined view "'+view+'"')
-		}
-	}
 	this._handlers = {
 		del: function(e) {
 			var params = $(e.currentTarget).data('cjDelete')
@@ -451,241 +434,38 @@ function cakejax() {
 		// 	if ( $el.is('button') ) $el.prop('disabled', ops.disabled)
 		// }
 	}
+	this.Element = function(name, rawHtml) {
+		var element = {}
+		if (!(name in cj.elements) && !rawHtml) {
+			throw new Error('Not enough arguments')
+		}
+		element.html = rawHtml
+		element.$ = $($.parseHTML(rawHtml, document, false))
+		element.render = function(data) {
+			var $fields, $hold = $('<div>').append(this.$), html, _this = this
+			if(data)
+				_this.data = data
+			html = this.html.replace(/{{([a-z\.0-9_]+)}}/img, function(v, m){return Hash.get(_this.data, m) || ''})
+			$hold.empty().html(html)
+			$hold.each(function(i, el) {
+				$fields = $(el).find('[cj-field]')
+				$fields.each(function(i, fel) {
+					$(fel).text(Hash.get(_this.data, $(fel).attr('cj-field')))
+				})
+			})
+			return $hold.contents()
+		}
+		return cj.elements[name] = element
+	}
 }
 
 // POLYFILLS
 if (!Array.prototype.map) {Array.prototype.map=function(a,t){for(var c=this,b=c.length,d=[],e=0;e<b;)e in c&&(d[e]=a.call(t,c[e],e++,c));d.lengh=b;return d}}
 if (!Array.prototype.indexOf) {Array.prototype.indexOf = function(obj, start) {for (var i = (start || 0), j = this.length; i < j; i++) {if (this[i] === obj) { return i; }}return -1;}}
 if (!Array.prototype.filter) {Array.prototype.filter = function(fun) {if (this === void 0 || this === null)throw new TypeError();var t = Object(this);	var len = t.length >>> 0;if (typeof fun !== "function")throw new TypeError();var res = [];var thisp = arguments[1];for (var i = 0; i < len; i++) {if (i in t) {var val = t[i];if (fun.call(thisp, val, i, t))res.push(val);}}return res;}}
-if (!Array.isArray) {Array.isArray = function (vArg) {return Object.prototype.toString.call(vArg) === "[object Array]"}}
+if (!Array.prototype.isArray) {Array.isArray = function (vArg) {return Object.prototype.toString.call(vArg) === "[object Array]"}}
 Function.prototype.callWithCopy = function() {var args = Array.prototype.slice.call(arguments);args.unshift($.extend(true, {}, args.shift()));return this.apply(this, args)}
-String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + this.slice(1);return s.replace(/(s)$/, '').replace(/_([A-Za-z]{1})/, function(v) {return v.replace('_', '').toUpperCase()}).replace(/ie$/, 'y')}
-
-// Hash
-;var Hash = new function() {
-	var Hash = {
-		extract: function(data, path) {
-			if(!new RegExp('[{\[]').test(path))
-				return Hash.get(data, path) || []
-			var tokens = Hash._tokenize(path),
-				got = [], out = [], context = {set: [data]}
-				
-			for (var i = 0; i < tokens.length; i++) {
-				got = []
-				for (var z = 0; z < context.set.length; z++) {
-					for (var key in context.set[z]) if (context.set[z].hasOwnProperty(key)) {
-						if (Hash._matchToken(key, tokens[i]))
-							got.push(context.set[z][key])
-					}
-				}
-				context.set = got
-			}
-			return context.set
-		},
-		_matchToken: function(key, token) {
-			if (token === '{n}')
-				return (Number(key) % 1 === 0)
-			if (token === '{s}')
-				return typeof key === 'string'
-			if (Number(token) % 1 === 0)
-				return (key == token)
-			return (key === token)
-		},
-		_matches: function(val, condition) {
-			
-		},
-		expand: function(data) {
-			var path, tokens, parent, child, out = {}, cleanPath, val, curr
-				
-			if(!data.length)
-				data = [data]
-			
-			for (var i = 0; i < data.length; i++) {
-				curr = data[i]
-				for (var path in curr) if (curr.hasOwnProperty(path)) {
-					tokens = Hash._tokenize(path).reverse()
-					val = typeof curr[path] === 'function' ? curr[path]() : curr[path]
-					if (tokens[0] === '{n}' || !isNaN(Number(tokens[0])) ) {
-						child = []
-						child[tokens[0]] = val
-					} else {
-						child = {}
-						child[tokens[0]] = val
-					}
-					tokens.shift()
-					for (var z = 0; z < tokens.length; z++) {
-						if (tokens[z] === '{n}' || !isNaN(Number(tokens[z])))
-							parent = [], parent[tokens[z]] = child
-						else
-							parent = {}, parent[tokens[z]] = child
-						child = parent
-					}
-					out = Hash.merge(false, out, child)
-				}
-			}
-			return out
-		},
-		get: function(data, path) {
-			var out = data,
-				tokens = Hash._tokenize(path)
-			for (var i = 0; i < tokens.length; i++) {
-				if (typeof out === 'object' && typeof out[tokens[i]] !== 'undefined')
-					out = out[tokens[i]]
-				else
-					return null
-			}
-			return out
-		},
-		merge: function() {
-			var obs = Array.prototype.slice.call(arguments), out, dest = false
-			
-			if (typeof arguments[0] === 'boolean')
-				dest = obs.shift()
-				
-			out = obs.shift()
-			for (var i = 0; i < obs.length; i++) {
-				for (var key in obs[i]) if (obs[i].hasOwnProperty(key)) {
-					if (typeof obs[i][key] === 'object' && out[key] && !obs[i][key].nodeType)
-						out[key] = Hash.merge(dest, out[key], obs[i][key])
-					else
-						out[key] = obs[i][key]
-				}
-			}
-			return out
-		},
-		insert: function(data, path, values) {
-			var tokens = Hash._tokenize(path), token, nextPath, expand = {}
-			if (path.indexOf('{') === -1 && path.indexOf('[]') === -1) {
-				return Hash._simpleOp('insert', data, tokens, values)
-			}
-			if (Hash.keys(data).length) {
-				token = tokens.shift()
-				nextPath = tokens.join('.')
-				for (var key in data) if (data.hasOwnProperty(key)) {
-					if (Hash._matchToken(key, token)) {
-						if(!nextPath)
-							data[key] = values
-						else
-							data[key] = Hash.insert(data[key], nextPath, values)
-					}
-				}
-			} else {
-				expand[path] = values
-				return Hash.expand([expand])
-			}
-			return data
-		},
-		remove: function(data, path) {
-			var tokens = Hash._tokenize(path), match, token, nextPath, removed
-			if (path.indexOf('{') === -1) {
-				return Hash._simpleOp('remove', data, tokens)
-			}
-			token = tokens.shift()
-			nextPath = tokens.join('.')
-			for (var key in data) if (data.hasOwnProperty(key)) {
-				match = Hash._matchToken(key, token)
-				if (match && typeof data[key] === 'object') {
-					data[key] = Hash.remove(data[key], nextPath)
-				} else if (match) {
-					if (Array.isArray(data)) {
-						data.splice(key,1)
-					} else {
-						delete data[key]
-					}
-				}
-			}
-			return data
-		},
-		_simpleOp: function(op, data, tokens, value) {
-			var hold = data, removed
-			for (var i = 0; i < tokens.length; i++) {
-				if (op === 'insert') {
-					if (i === tokens.length-1) {
-						hold[tokens[i]] = value
-						return data
-					}
-					if (typeof hold[tokens[i]] !== 'object') {
-						if (!isNaN(Number(tokens[i+1]))) {
-							hold[tokens[i]] = []
-						} else {
-							hold[tokens[i]] = {}
-						}
-					}
-					hold = hold[tokens[i]]
-				} else if (op === 'remove') {
-					if (i === tokens.length-1) {
-						removed = Hash.insert({}, 'item', hold[tokens[i]])
-						if (Array.isArray(hold)) {
-							hold.splice(tokens[i],1)
-						} else {
-							delete hold[tokens[i]]
-						}
-						data = removed.item
-						return data
-					}
-					if (typeof hold[tokens[i]] === 'undefined') {
-						return data
-					}
-					hold = hold[tokens[i]]
-				}
-			}
-		},
-		_tokenize: function(path) {
-			if (path.indexOf('data[') === -1) {
-				return path.split('.')
-			} else {
-				return path.replace(/^data/, '').replace(/^\[|\]$/g, '').split('][').map(function(v) {return v === '' ? '{n}' : v })
-			}
-		},
-		flatten: function() {
-			return Function.callWithCopy.apply(Hash._flatten, arguments)
-		},
-		_flatten: function(data, separator, limit) {
-			var path = '', stack = [], out = {}, key, el, curr,
-				separator = separator || '.', limit = limit || false, wrap = separator === ']['
-			while (Hash.keys(data).length || (Array.isArray(data) && data.length) ) {
-				if (Array.isArray(data)) {
-					key = data.length-1
-					el = data.pop()
-				}
-				else {
-					key = Hash.keys(data)[0]
-					el = data[key]
-					delete data[key]
-				}
-				
-				if (path.split(separator).length === limit || typeof el !== 'object' || el == null || el.nodeType) {
-					if(wrap)
-						out['data['+path+key+']'] = el || ''
-					else
-						out[path + key] = el || ''
-				}
-				else {
-					if (Hash.keys(data).length > 0) {
-						stack.push([data,path])
-					}
-					data = el
-					path += key + separator
-				}
-				if (Hash.keys(data).length === 0 && stack.length) {
-					curr = stack.pop()
-					data = curr[0], path = curr[1]
-				}
-			}
-			return out
-		},
-		keys: function(obj) {
-			var keys = []
-			if (Array.isArray(obj)) {
-				obj.map(function(v, i) {keys.push(i)})
-			} else {
-				for (var key in obj) if (obj.hasOwnProperty(key))
-					keys.push(key)
-			}
-			return keys
-		}
-	}
-	return Hash
-}()
+String.prototype.modelize = function() {var s = this.charAt(0).toUpperCase() + this.slice(1);return s.replace(/(\w)[s]/g, '$1').replace(/_([A-Za-z]{1})/g, function(v) {return v.replace(/_/g, '').toUpperCase()}).replace(/\wie$/g, 'y')}
+var Hash=new function(){var a={extract:function(b,c){if(!new RegExp("[{[]").test(c)){return a.get(b,c)||[]}var h=a._tokenize(c),f=[],e=[],g={set:[b]};for(var k=0;k<h.length;k++){f=[];for(var d=0;d<g.set.length;d++){for(var j in g.set[d]){if(g.set[d].hasOwnProperty(j)){if(a._matchToken(j,h[k])){f.push(g.set[d][j])}}}}g.set=f}return g.set},_matchToken:function(b,c){if(c==="{n}"){return(Number(b)%1===0)}if(c==="{s}"){return typeof b==="string"}if(Number(c)%1===0){return(b==c)}return(b===c)},_matches:function(b,c){},expand:function(b){var c,j,l,h,e={},k,f,g;if(!b.length){b=[b]}for(var m=0;m<b.length;m++){g=b[m];for(var c in g){if(g.hasOwnProperty(c)){j=a._tokenize(c).reverse();f=typeof g[c]==="function"?g[c]():g[c];if(j[0]==="{n}"||!isNaN(Number(j[0]))){h=[];h[j[0]]=f}else{h={};h[j[0]]=f}j.shift();for(var d=0;d<j.length;d++){if(j[d]==="{n}"||!isNaN(Number(j[d]))){l=[],l[j[d]]=h}else{l={},l[j[d]]=h}h=l}e=a.merge(false,e,h)}}}return e},get:function(b,e){var f=b,c=a._tokenize(e);for(var d=0;d<c.length;d++){if(typeof f==="object"&&typeof f[c[d]]!=="undefined"){f=f[c[d]]}else{return null}}return f},merge:function(){var c=Array.prototype.slice.call(arguments),e,b=false;if(typeof arguments[0]==="boolean"){b=c.shift()}e=c.shift();for(var d=0;d<c.length;d++){for(var f in c[d]){if(c[d].hasOwnProperty(f)){if(typeof c[d][f]==="object"&&e[f]&&!c[d][f].nodeType){e[f]=a.merge(b,e[f],c[d][f])}else{e[f]=c[d][f]}}}}return e},insert:function(b,c,d){var f=a._tokenize(c),e,i,h={};if(c.indexOf("{")===-1&&c.indexOf("[]")===-1){return a._simpleOp("insert",b,f,d)}if(a.keys(b).length){e=f.shift();i=f.join(".");for(var g in b){if(b.hasOwnProperty(g)){if(a._matchToken(g,e)){if(!i){b[g]=d}else{b[g]=a.insert(b[g],i,d)}}}}}else{h[c]=d;return a.expand([h])}return b},remove:function(b,c){var f=a._tokenize(c),d,g,i,h;if(c.indexOf("{")===-1){return a._simpleOp("remove",b,f)}g=f.shift();i=f.join(".");for(var e in b){if(b.hasOwnProperty(e)){d=a._matchToken(e,g);if(d&&typeof b[e]==="object"){b[e]=a.remove(b[e],i)}else{if(d){if(Array.isArray(b)){b.splice(e,1)}else{delete b[e]}}}}}return b},_simpleOp:function(e,c,f,b){var h=c,d;for(var g=0;g<f.length;g++){if(e==="insert"){if(g===f.length-1){h[f[g]]=b;return c}if(typeof h[f[g]]!=="object"){if(!isNaN(Number(f[g+1]))){h[f[g]]=[]}else{h[f[g]]={}}}h=h[f[g]]}else{if(e==="remove"){if(g===f.length-1){d=a.insert({},"item",h[f[g]]);if(Array.isArray(h)){h.splice(f[g],1)}else{delete h[f[g]]}c=d.item;return c}if(typeof h[f[g]]==="undefined"){return c}h=h[f[g]]}}}},_tokenize:function(b){if(b.indexOf("data[")===-1){return b.split(".")}else{return b.replace(/^data/,"").replace(/^\[|\]$/g,"").split("][").map(function(c){return c===""?"{n}":c})}},flatten:function(){return Function.callWithCopy.apply(a._flatten,arguments)},_flatten:function(b,g,i){var c="",k=[],d={},j,h,f,g=g||".",i=i||false,e=g==="][";while(a.keys(b).length||(Array.isArray(b)&&b.length)){if(Array.isArray(b)){j=b.length-1;h=b.pop()}else{j=a.keys(b)[0];h=b[j];delete b[j]}if(c.split(g).length===i||typeof h!=="object"||h==null||h.nodeType){if(e){d["data["+c+j+"]"]=h||""}else{d[c+j]=h||""}}else{if(a.keys(b).length>0){k.push([b,c])}b=h;c+=j+g}if(a.keys(b).length===0&&k.length){f=k.pop();b=f[0],c=f[1]}}return d},keys:function(b){var c=[];if(Array.isArray(b)){b.map(function(e,f){c.push(f)})}else{for(var d in b){if(b.hasOwnProperty(d)){c.push(d)}}}return c}};return a}();
 
 var cj = cj || new cakejax()
