@@ -224,7 +224,7 @@ function cakejax() {
 		var $form = (arg.form) ? $(arg.form) : arg, model
 		if (typeof arg.data == 'object') {
 			try {
-				if ($form.jQuery) {
+				if ($form.jquery) {
 					for(var selector in _this.callbacks)
 						if (_this.callbacks.hasOwnProperty(selector) && $form.is(selector) && ( method in _this.callbacks[selector] ) && typeof _this.callbacks[selector][method] === 'function' )
 							if (_this.callbacks[selector][method].call(_this, arg) === false)
