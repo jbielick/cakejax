@@ -231,7 +231,7 @@ function cakejax() {
 		var $ctrl = (r.controller) ? $(r.controller) : r, model
 		if (typeof r.data === 'object') {
 			try {
-				if ($ctrl.jQuery) {
+				if ($ctrl.jquery) {
 					for(var selector in cj.callbacks)
 						if (cj.callbacks.hasOwnProperty(selector) && $ctrl.is(selector) && ( method in cj.callbacks[selector] ) && typeof cj.callbacks[selector][method] === 'function' )
 							if (cj.callbacks[selector][method].call(this, r, xhr) === false)
