@@ -1,4 +1,4 @@
 cakejax
 =======
 
-cakeJAX development repository
+this project is no longer being developed.
